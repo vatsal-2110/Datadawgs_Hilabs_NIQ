@@ -114,11 +114,16 @@ scores `M1_code_coverage` … `M7_id_validity` (0–100) and `overall_score`. De
 | address_1, address_2, city, state, zip, std_address, addr_id | raw and standardized parts; addr_id = building identity |
 | lat, lon, county_fips5, tract | from the Census geocoder |
 | tier | VERIFIED / PROBABLE / UNVERIFIED / NONE (rules: `docs/logic_address_mapping.md`) |
-| sources | e.g. `DAC\|NPPES_LOC`, `NPPES_LOC\|DAC_GROUP`, `NPPES_LOC\|REGISTRY:CMS_HOSPITAL` |
+| sources | e.g. `DAC\|NPPES_LOC`, `NPPES_LOC\|DAC_GROUP`, `NPPES_LOC\|REGISTRY:CMS_HOSPITAL`, `NPPES_ENDPOINT` |
 | n_independent_sources | families agreeing: NPPES, CMS enrolment (DAC), CMS facility registry |
 | tin_corroboration, npis_on_tin_at_addr | other NPIs of the same TIN report this address in their own records |
-| dac_name_match, registry_match, nppes_current, geocoded, in_state | evidence flags |
+| dac_name_match, registry_match, geocoded, in_state | evidence flags |
+| nppes_current | NPPES updated within 24 months of the newest record: reported only, never raises a tier (logic 3.1) |
+| is_po_box | PO box: never VERIFIED or PROBABLE |
 | points, rank_in_pair, is_best | ranking inside the pair |
+
+`data/stage5/c5_audit.json` / `.txt` (`python -m src.stage5_audit`): A recency test, B source triangulation,
+C NPPES-only baseline vs pipeline (feeds `summary.json → address_baseline_vs_pipeline`).
 
 `data/stage5/npi_specialty.parquet` (+ `.csv`): npi, enumeration_type, primary_taxonomy(+desc), spec_cd, specialty,
 specialty_source (NPPES_PRIMARY / NPPES_SECONDARY / FACILITY_MAP / CODE_PROFILE / UNMAPPED), specialty_note.

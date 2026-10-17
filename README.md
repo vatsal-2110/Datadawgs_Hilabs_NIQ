@@ -29,7 +29,8 @@ Place the HiLabs-supplied Excel at the path in `config.yaml → paths.hilabs_xls
 ## Run everything
 ```bash
 python -m src.run_all            # or: make all
-python -m tests.verify_memberA   # independent checks (or: make verify)
+python -m tests.verify_memberA   # independent checks of the outputs (or: make verify)
+python -m pytest tests -q        # unit tests, no data needed (or: make test)
 streamlit run app/streamlit_app.py
 ```
 Resume from any stage: `python -m src.run_all --from c5`. Internet access is needed on the first run (Centene files,
@@ -47,7 +48,8 @@ browser into `data/raw/index/<name>.json`.
 | C4 | `src.stage4_extract_rates` | streams the rate file, keeps HiLabs codes, dollar rates, median per provider × service |
 | C3 | `src.stage3_grade_files` | grades the used file + same-payer comparison files, **in parallel**, 7 weighted metrics |
 | C5 | `src.stage5_fetch_sources` | NPPES API + CMS Doctors & Clinicians, **parallel and cached** |
-| C5 | `src.stage5_address_map` | candidate addresses → Census-standardized → evidence → VERIFIED / PROBABLE / UNVERIFIED |
+| C5 | `src.stage5_address_map` | candidate addresses → shared standardizer (`src/common/address.py`) + Census geocoder → evidence → VERIFIED / PROBABLE / UNVERIFIED |
+| C5 | `src.stage5_audit` | evidence behind the tier rules (recency test, source triangulation) and the NPPES-only baseline vs the pipeline |
 | C5 | `src.stage5_specialty` | specialty per NPI (HiLabs crosswalk → NUCC-verified facility map → code profile) |
 | C6 | `src.stage6_build_rate_file` | final Excel at NPI × TIN × address × code |
 | C7 | `src.stage7_cost_effectiveness` | peer-relative cost index (same code + specialty + county) |
@@ -65,7 +67,8 @@ browser into `data/raw/index/<name>.json`.
 |---|---|
 | Centene index + rate files | plans, networks, negotiated rates (the subject data) |
 | HiLabs Excel | billing codes per specialty, weights, taxonomy → specialty crosswalk |
-| NPPES NPI Registry API | NPI type, taxonomies, primary + secondary practice locations, last-updated date |
+| NPPES NPI Registry API | NPI type, taxonomies, primary + secondary practice locations, endpoint affiliation addresses, last-updated date |
+| CMS facility registries (hospital, ASC, DME, home health) | official addresses of organizations, which the Doctors & Clinicians file doesn't cover |
 | CMS Doctors & Clinicians (monthly) | Medicare-enrolled practice addresses and group names: a fresher, independent address source |
 | US Census geocoder | address standardization and existence check; county for peer groups |
 | NUCC taxonomy CSV | taxonomy code descriptions; verifies the facility-specialty map |

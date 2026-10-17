@@ -3,25 +3,26 @@
 Candidate sources per (NPI, TIN)       (fetched by src.stage5_fetch_sources)
   NPPES_LOC   NPPES primary practice LOCATION
   NPPES_SEC   NPPES secondary practice locations
+  NPPES_ENDPOINT  NPPES endpoint affiliation address (same NPPES family: can't confirm NPPES by itself)
   DAC         CMS Doctors & Clinicians: Medicare-enrolled practice addresses (refreshed monthly)
   TIN_SIBLING for TIN-only rows (no NPI): addresses of the other NPIs under the same TIN
 (NPPES MAILING addresses are NOT practice locations and are never used as candidates.)
 
-Standardization: every distinct address goes through the US Census geocoder (batch API). It returns a
-standardized address, Match / No_Match, coordinates and county FIPS. Addresses are compared at
-building level (standardized street + city + ZIP5); suite numbers are kept for display only.
+Standardization: every address is standardized with the shared rules (src/common/address.py), then sent to the
+US Census geocoder (batch API), which returns a standardized address, Match / No_Match, coordinates and county
+FIPS. Addresses are compared at building level (standardized street + ZIP5); suites are kept for display only.
 
 Evidence per candidate (npi, tin, address):
-  n_independent_sources   NPPES (LOC or SEC) and DAC count as two independent sources
+  n_independent_sources   families agreeing on the building: NPPES, CMS enrolment (DAC), CMS facility registry
   tin_corroboration       another NPI billing under the SAME TIN in the PTD file practices at this address
   dac_name_match          DAC group (facility_name) shares >= 50% of name tokens with the PTD business name
-  nppes_current           NPPES record updated within config address.nppes_fresh_months
   geocoded                Census Match (the address exists)
+  nppes_current           reported only: NPPES update age does not predict a correct address (stage5_audit, A)
 
-Tiers (logic D5.x):
+Tiers (logic D5.5, D5.8):
   VERIFIED   geocoded AND (n_independent_sources >= 2 OR (1 source AND (tin_corroboration OR dac_name_match)))
-  PROBABLE   geocoded AND current single source (DAC, or NPPES updated recently)
-  UNVERIFIED everything else (kept, labelled)
+  PROBABLE   geocoded AND one non-NPPES source (DAC individual or group, or a CMS facility registry)
+  UNVERIFIED everything else (NPPES-only, not geocoded, or a PO box): kept, labelled
 Ranking inside a pair: tier, then evidence points; is_best marks the top address.
 
 Outputs (data/stage5/): npi_tin_address.parquet (+ .csv), geocode.parquet, c5_report.txt
@@ -41,23 +42,22 @@ from datetime import date
 import pandas as pd
 import requests
 
+from src.common.address import building_key, standardize_address
 from src.common.normalize import load_config
 
-ABBR = {"STREET": "ST", "AVENUE": "AVE", "BOULEVARD": "BLVD", "ROAD": "RD", "DRIVE": "DR", "SUITE": "STE",
-        "PARKWAY": "PKWY", "HIGHWAY": "HWY", "LANE": "LN", "COURT": "CT", "PLACE": "PL", "NORTH": "N",
-        "SOUTH": "S", "EAST": "E", "WEST": "W", "CIRCLE": "CIR", "FLOOR": "FL"}
 STOP = {"INC", "LLC", "MD", "M", "D", "THE", "OF", "A", "PC", "CORP", "CORPORATION", "GROUP", "MEDICAL", "ASSOCIATES",
         "PLLC", "LTD", "CO", "AND", "&", "CENTER", "HEALTH"}
 
 
-def norm_street(s: str) -> str:
-    s = re.sub(r"[^\w\s#]", " ", (s or "").upper())
-    s = re.sub(r"\b(STE|SUITE|UNIT|APT|#|BLDG|FL|FLOOR|RM|ROOM)\b.*$", "", s)  # drop suite part
-    return " ".join(ABBR.get(w, w) for w in s.split())
+def norm_street(s) -> str:
+    """Street line sent to the geocoder: standardized, suite removed (shared rules, src/common/address.py)."""
+    return standardize_address(s).street or ""
 
 
 def raw_key(a1, city, state, z):
-    return f"{norm_street(a1)}|{(city or '').upper().strip()}|{(state or '').upper()}|{(z or '')[:5]}"
+    """Building identity for every cross-source comparison (registry, DAC group, TIN corroboration, and
+    addresses the Census geocoder can't match): standardized street key + ZIP5 (logic D5.7)."""
+    return building_key(a1, city, state, z)
 
 
 def name_tokens(s):
@@ -121,10 +121,12 @@ def main():
     dac = pd.read_parquet(s5 / "dac_addresses.parquet")
     today = date.today()
     fresh_days = cfg["address"]["nppes_fresh_months"] * 30.44
+    # as-of = newest NPPES update in the fetched data, not the clock, so a re-run gives the same result
+    as_of = pd.to_datetime(nppes.last_updated, errors="coerce").max()
 
     # ---------------- candidates
-    na = na[na.purpose.isin(["LOCATION", "PRACTICE"])].copy()
-    na["source"] = na.purpose.map({"LOCATION": "NPPES_LOC", "PRACTICE": "NPPES_SEC"})
+    na = na[na.purpose.isin(["LOCATION", "PRACTICE", "ENDPOINT"])].copy()
+    na["source"] = na.purpose.map({"LOCATION": "NPPES_LOC", "PRACTICE": "NPPES_SEC", "ENDPOINT": "NPPES_ENDPOINT"})
     na["facility_name"] = None
     d = dac.rename(columns={"adr_ln_1": "address_1", "adr_ln_2": "address_2", "citytown": "city"})
     d = d.assign(source="DAC")[["npi", "source", "address_1", "address_2", "city", "state", "zip", "facility_name"]]
@@ -173,7 +175,7 @@ def main():
     cand["addr_id"] = cand.std_address.where(cand.geocoded, cand.key)   # building-level identity
 
     # ---------------- evidence
-    nppes["age_days"] = (pd.Timestamp(today) - pd.to_datetime(nppes.last_updated, errors="coerce")).dt.days
+    nppes["age_days"] = (as_of - pd.to_datetime(nppes.last_updated, errors="coerce")).dt.days
     cur = dict(zip(nppes.npi, nppes.age_days <= fresh_days))
     cand["nppes_current"] = cand.npi.map(cur).fillna(False).astype(bool)
     c = cand[cand.address_1.notna() & cand.source.notna()]   # rows without any address are handled as NONE below
@@ -220,7 +222,7 @@ def main():
                                    + ev.registry_match.ne("").astype(int))
     # TIN corroboration: how many OTHER NPIs on the same TIN report this address in their OWN records
     # (NPPES or individual DAC), so copied group data can never corroborate itself
-    own = c[c.source.isin(["NPPES_LOC", "NPPES_SEC", "DAC"])].dropna(subset=["npi"])
+    own = c[c.source.isin(["NPPES_LOC", "NPPES_SEC", "NPPES_ENDPOINT", "DAC"])].dropna(subset=["npi"])
     per = own.groupby(["tin", "addr_id"]).npi.nunique().rename("npis_on_tin_at_addr")
     ev = ev.merge(per, on=["tin", "addr_id"], how="left")
     ev["npis_on_tin_at_addr"] = ev.npis_on_tin_at_addr.fillna(0).astype(int)
@@ -232,17 +234,20 @@ def main():
     # the same match again would be circular
     ev["dac_name_match"] &= ev.sources.str.contains(r"(?:^|\|)DAC(?:\||$)", regex=True)
     ev["in_state"] = ev.state.eq(cfg["scope"]["state"])
+    ev["is_po_box"] = [standardize_address(a).is_po_box for a in ev.address_1]   # never a practice location
 
+    # Tiers (logic D5.5, D5.8). nppes_current is reported but is NOT evidence: on this run's providers,
+    # Medicare confirms NPPES addresses updated within 24 months no more often than older ones
+    # (data/stage5/c5_audit.txt, check A), so a recent update can't raise an address's tier.
     cond_ver = ev.geocoded & ((ev.n_independent_sources >= 2) |
                               ((ev.n_independent_sources == 1) & (ev.tin_corroboration | ev.dac_name_match)))
-    cond_pro = ev.geocoded & (ev.sources.str.contains("DAC") | ev.registry_match.ne("")
-                              | (ev.sources.str.contains("NPPES") & ev.nppes_current))
+    cond_pro = ev.geocoded & (ev.sources.str.contains("DAC") | ev.registry_match.ne(""))
     ev["tier"] = "UNVERIFIED"
-    ev.loc[cond_pro, "tier"] = "PROBABLE"
-    ev.loc[cond_ver, "tier"] = "VERIFIED"
+    ev.loc[cond_pro & ~ev.is_po_box, "tier"] = "PROBABLE"
+    ev.loc[cond_ver & ~ev.is_po_box, "tier"] = "VERIFIED"
     ev["points"] = (2 * ev.sources.str.contains("DAC") + 2 * ev.registry_match.ne("") + ev.sources.str.contains("NPPES_LOC")
-                    + ev.sources.str.contains("NPPES_SEC") + 2 * ev.tin_corroboration + ev.dac_name_match
-                    + ev.nppes_current + ev.geocoded + ev.in_state).astype(int)
+                    + ev.sources.str.contains("NPPES_SEC") + ev.sources.str.contains("NPPES_ENDPOINT")
+                    + 2 * ev.tin_corroboration + ev.dac_name_match + ev.geocoded + ev.in_state).astype(int)
     ev["tier_rank"] = ev.tier.map({"VERIFIED": 0, "PROBABLE": 1, "UNVERIFIED": 2})
     ev = ev.sort_values(["npi", "tin", "tier_rank", "points"], ascending=[True, True, True, False])
     ev["rank_in_pair"] = ev.groupby(["npi", "tin"], dropna=False).cumcount() + 1
@@ -256,7 +261,7 @@ def main():
     cols = ["npi", "tin", "address", "address_1", "address_2", "city", "state", "zip", "std_address", "addr_id",
             "lat", "lon", "county_fips5", "tract", "tier", "points", "rank_in_pair", "is_best", "sources",
             "n_independent_sources", "tin_corroboration", "npis_on_tin_at_addr", "dac_name_match", "registry_match", "facility_names",
-            "nppes_current", "geocoded", "in_state", "evidence"]
+            "nppes_current", "geocoded", "in_state", "is_po_box", "evidence"]
     ev = ev[cols]
     # pairs with no candidate at all are kept with tier NONE
     missing = pairs.merge(ev[["npi", "tin"]].drop_duplicates(), on=["npi", "tin"], how="left", indicator=True)

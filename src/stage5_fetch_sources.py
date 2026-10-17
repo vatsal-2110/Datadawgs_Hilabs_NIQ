@@ -2,7 +2,8 @@
 
 Sources (URLs in config.yaml -> sources):
   * NPPES NPI Registry API v2.1  - NPI type, names, taxonomies, practice LOCATION, secondary practice
-                                    locations, MAILING, last_updated (one request per NPI)
+                                    locations, MAILING, endpoint affiliation addresses (ENDPOINT),
+                                    last_updated (one request per NPI)
   * CMS Doctors & Clinicians (DAC) National Downloadable File, via the CMS datastore API
                                   - Medicare-enrolled clinicians: one row per clinician x group x practice
                                     address, refreshed monthly (batches of NPIs with an 'in' query)
@@ -110,6 +111,14 @@ def fetch_nppes(npis, cfg):
                               "address_2": a.get("address_2"), "city": a.get("city"), "state": a.get("state"),
                               "zip": (a.get("postal_code") or "")[:5], "country": a.get("country_code"),
                               "phone": a.get("telephone_number")})
+        # Direct/FHIR endpoint "affiliation" addresses: entered separately from the practice location
+        # (often by the EHR/HIE that set up the endpoint), so they can surface a current site (logic D5.9)
+        for a in r.get("endpoints", []) or []:
+            if a.get("address_1"):
+                addr_rows.append({"npi": n, "purpose": "ENDPOINT", "address_1": a.get("address_1"),
+                                  "address_2": a.get("address_2"), "city": a.get("city"), "state": a.get("state"),
+                                  "zip": (a.get("postal_code") or "")[:5], "country": a.get("country_code"),
+                                  "phone": None})
     return pd.DataFrame(npi_rows), pd.DataFrame(addr_rows)
 
 

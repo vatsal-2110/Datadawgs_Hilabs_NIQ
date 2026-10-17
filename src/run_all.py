@@ -2,7 +2,7 @@
 
 Usage (from project root, venv active):
   python -m src.run_all              # every stage
-  python -m src.run_all --from c3    # start from a stage (c1, profile, pairs, labels, rates, c3, fetch, c5, specialty, c6, c7, summary)
+  python -m src.run_all --from c3    # start from a stage (c1, profile, pairs, labels, rates, c3, fetch, c5, c5audit, specialty, c6, c7, summary)
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ STAGES = [
     ("c3", "src.stage3_grade_files"),           # C3 file grades (parallel)
     ("fetch", "src.stage5_fetch_sources"),      # NPPES + CMS DAC (parallel, cached)
     ("c5", "src.stage5_address_map"),           # addresses + tiers (Census geocoder)
+    ("c5audit", "src.stage5_audit"),            # evidence behind the C5 rules + NPPES-only baseline
     ("specialty", "src.stage5_specialty"),      # specialty per NPI
     ("c6", "src.stage6_build_rate_file"),       # final Excel
     ("c7", "src.stage7_cost_effectiveness"),    # bonus: cost effectiveness

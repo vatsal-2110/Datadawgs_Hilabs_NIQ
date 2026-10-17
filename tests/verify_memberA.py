@@ -147,7 +147,15 @@ def main():
     ver_rule = a.geocoded.astype(bool) & ((a.n_independent_sources >= 2) | ((a.n_independent_sources == 1)
                                           & (a.tin_corroboration.astype(bool) | a.dac_name_match.astype(bool))))
     check("C5: every VERIFIED row satisfies the VERIFIED rule", ver_rule[a.tier == "VERIFIED"].all())
-    check("C5: every row satisfying the VERIFIED rule is VERIFIED", (a[ver_rule].tier == "VERIFIED").all())
+    check("C5: every row satisfying the VERIFIED rule is VERIFIED (PO boxes excluded)",
+          (a[ver_rule & ~a.is_po_box.astype(bool)].tier == "VERIFIED").all())
+    pro_rule = a.geocoded.astype(bool) & (a.sources.str.contains("DAC") | a.registry_match.fillna("").ne("")) & ~ver_rule
+    check("C5: every PROBABLE row has a geocoded non-NPPES source (DAC or CMS registry)",
+          pro_rule[a.tier == "PROBABLE"].all())
+    check("C5: NPPES-only addresses are never above UNVERIFIED (update age is not evidence, audit A)",
+          (a[~a.sources.str.contains(r"DAC|REGISTRY", regex=True) & ~a.tin_corroboration.astype(bool)]
+           .tier == "UNVERIFIED").all())
+    check("C5: no PO box is VERIFIED or PROBABLE", not (a.is_po_box.astype(bool) & a.tier.isin(["VERIFIED", "PROBABLE"])).any())
     check("C5: no address is supported only by DAC_GROUP (confirmation-only source)",
           not a.sources.str.fullmatch(r"DAC_GROUP(\|REGISTRY:.*)?").any())
     check("C5: every (npi,tin) pair has an address row (or NONE)",

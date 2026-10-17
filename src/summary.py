@@ -61,6 +61,8 @@ def main():
             "pct_npis_with_verified_or_probable": round(100 * pro.npi.dropna().nunique() / len(npis), 1),
             "pct_tins_with_verified_or_probable": round(100 * pro.tin.nunique() / len(tins), 1),
             "best_address_tier_per_pair": addr[addr.is_best].tier.value_counts().to_dict()},
+        "address_baseline_vs_pipeline": (json.loads((P["stage5"] / "c5_audit.json").read_text(encoding="utf-8"))
+                                         ["C_baseline_vs_pipeline"] if (P["stage5"] / "c5_audit.json").exists() else None),
         "specialty_sources": spec.specialty_source.value_counts().to_dict(),
         "cost_effectiveness_labels": ce.label.value_counts().to_dict() if ce is not None else None,
     }
@@ -82,8 +84,14 @@ def main():
           f"| Rates extracted (HiLabs codes) | {S['rates_extracted']['rate_rows']:,} rows, {S['rates_extracted']['billing_codes']} codes, {S['rates_extracted']['unique_npis']:,} NPIs, {S['rates_extracted']['unique_tins']:,} TINs |",
           f"| Final rate file | {S['final_rate_file']['rows']:,} rows, {S['final_rate_file']['unique_npis']:,} NPIs, {S['final_rate_file']['unique_tins']:,} TINs, {S['final_rate_file']['unique_addresses']:,} addresses |",
           f"| **NPIs linked to a VERIFIED address** | **{al['pct_npis_with_verified_address']}%** (verified or probable: {al['pct_npis_with_verified_or_probable']}%) |",
-          f"| **TINs linked to a VERIFIED address** | **{al['pct_tins_with_verified_address']}%** (verified or probable: {al['pct_tins_with_verified_or_probable']}%) |",
-          "", "## File quality scores (C3)", "", "| File | Role | Overall (0-100) |", "|---|---|---|"]
+          f"| **TINs linked to a VERIFIED address** | **{al['pct_tins_with_verified_address']}%** (verified or probable: {al['pct_tins_with_verified_or_probable']}%) |"]
+    bv = S["address_baseline_vs_pipeline"]
+    if bv:
+        md += [f"| NPPES-only baseline: NPPES primary independently confirmed | {bv['pct_baseline_confirmed']}% "
+               f"(pipeline: {bv['pct_pipeline_verified']}%; {bv['verified_only_at_non_nppes_primary_address']} NPIs verified only "
+               f"at a non-NPPES-primary address; {bv['pairs_best_address_not_nppes_primary']} pairs whose best address is not "
+               f"the NPPES primary) |"]
+    md += ["", "## File quality scores (C3)", "", "| File | Role | Overall (0-100) |", "|---|---|---|"]
     md += [f"| {s['file_name']} | {s['role']} | {s['overall_score']} |" for s in S["file_quality_scores"]]
     md += ["", "## Specialty sources", "", ", ".join(f"{k}: {v:,}" for k, v in S["specialty_sources"].items())]
     if S["cost_effectiveness_labels"]:

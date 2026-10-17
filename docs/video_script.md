@@ -43,7 +43,10 @@ billing code, and **44% of NPIs and 41% of TINs** are linked to a **verified** a
   that confirms it."
 - "Verified means **two independent pieces of evidence agree**. We caught and removed circular evidence on the way: one medical group's 194
   sites were being copied to every one of its NPIs."
-- "One TIN can have many addresses: 378 TINs and 317 NPIs have more than one verified or probable site, and every one stays in the file."
+- "We tested our own rules too. We planned to trust NPPES records updated in the last two years. The data said no: Medicare confirms
+  recently updated records 64% of the time and older ones 70%. So that rule was dropped. Statewide, NPPES is the odd one out
+  more often than Medicare, but Medicare is wrong 14% of the time too, so we reward **agreement**, never a single source."
+- "One TIN can have many addresses: 220 TINs and 189 NPIs have more than one verified or probable site, and every one stays in the file."
 
 ### 4:15–4:50 · The rate file, UI and bonus (show: Analyst view, filter 99213; then Excel)
 - "One rate per row: the standard, no-modifier office rate. Every variant, like telehealth, is in a second sheet."

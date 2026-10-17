@@ -1,7 +1,7 @@
 # Run from the project root with the venv active. On Windows without `make`, run the commands directly.
 PY ?= python
 
-.PHONY: install stage1 stage1-sample profile pairs labels rates verify grade fetch address specialty ratefile cost summary all ui
+.PHONY: install stage1 stage1-sample profile pairs labels rates verify test grade fetch address c5audit specialty ratefile cost summary all ui
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -27,6 +27,9 @@ rates:             ## C4: extract rates for HiLabs codes from in-scope in-networ
 verify:            ## independent checks of Member A outputs (C1, labels, pairs, rates)
 	$(PY) -m tests.verify_memberA
 
+test:              ## unit tests (no data needed): address standardization, C5 tier rules
+	$(PY) -m pytest tests -q
+
 grade:             ## C3: grade the used file + comparison files (parallel)
 	$(PY) -m src.stage3_grade_files
 
@@ -35,6 +38,9 @@ fetch:             ## C5: NPPES + CMS Doctors & Clinicians (parallel, cached)
 
 address:           ## C5: candidate addresses, Census geocoding, evidence tiers
 	$(PY) -m src.stage5_address_map
+
+c5audit:           ## C5: evidence behind the tier rules + NPPES-only baseline vs pipeline
+	$(PY) -m src.stage5_audit
 
 specialty:         ## specialty per NPI
 	$(PY) -m src.stage5_specialty
