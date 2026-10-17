@@ -8,8 +8,8 @@ Every number comes from `docs/summary.md`; if you re-run the pipeline, read the 
 ### 0:00–0:30 · The problem and the answer (show: Executive view, top tiles)
 "Centene publishes its negotiated rates in huge machine-readable files. Our job was to find its **PPO network** for **California
 commercial group**, grade those files, and tie every provider to a **real practicing address**.
-Result: **453 PPO plans**, served by **one** rate file. From it we built a rate file of **11,724 rows** at NPI × TIN × address ×
-billing code, and **44% of NPIs and 41% of TINs** are linked to a **verified** address."
+Result: **453 PPO plans**, served by **one** rate file. From it we built a rate file of **8,821 rows** at NPI × TIN × address ×
+billing code, and **45% of NPIs and 41% of TINs** are linked to a **verified** address."
 
 ### 0:30–1:30 · Finding the PPO network (show: funnel chart, then `docs/logic_ppo_network.md` §3)
 - "We parsed all **11** Centene index files: 3,275 plan rows, **66 unique rate files** after removing duplicate links."
@@ -54,5 +54,5 @@ billing code, and **44% of NPIs and 41% of TINs** are linked to a **verified** a
   specialty and county, weighted by what matters for that specialty."
 
 ### 4:50–5:00 · Close
-"Everything re-runs with one command from the README, streams large files, runs in parallel, and passes 38 independent checks,
+"Everything re-runs with one command from the README, streams large files, runs in parallel, and passes 41 independent checks plus 35 unit tests,
 including a full recomputation of every extracted rate."

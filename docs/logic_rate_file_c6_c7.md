@@ -20,11 +20,14 @@ hospital, …). These are legitimately different prices, not noise.
 ### D6.2 Which addresses
 Every VERIFIED and PROBABLE address of the (NPI, TIN). If there is none, the single best UNVERIFIED address, or NONE.
 So no rate is dropped for lack of an address, and the tier tells the user how far to trust it.
-**Result:** 11,724 rows: VERIFIED 5,424 · PROBABLE 3,968 · UNVERIFIED 2,319 · NONE 13. 2,824 NPIs, 2,231 TINs, 3,455 addresses, 134 codes.
+**Result:** 8,821 rows: VERIFIED 5,580 · PROBABLE 213 · UNVERIFIED 3,015 · NONE 13. 2,824 NPIs, 2,231 TINs, 2,944 addresses, 134 codes.
+Every extracted (NPI, TIN, code) is present. The file has fewer rows than in the first run (11,724) because an NPPES address
+no longer counts as PROBABLE just because the NPPES record was updated recently (Part B §3.1): those pairs now carry their
+single best address, labelled UNVERIFIED, instead of several weakly supported ones.
 
 ### D6.3 Specialty on each row
 The provider's specialty (rules in Part B §3). `code_in_specialty_list` flags whether HiLabs lists the code for that specialty
-(true for 58.4% of rows). The rest are legitimate but less typical (e.g. an urgent-care centre billing an office visit), or the
+(true for 55.5% of rows). The rest are legitimate but less typical (e.g. an urgent-care centre billing an office visit), or the
 provider is "Unmapped".
 
 ## C7 — Cost effectiveness (bonus)
@@ -48,7 +51,7 @@ family physician's would measure geography, not efficiency.
 - INSUFFICIENT_DATA: fewer than 3 codes
 - otherwise AVERAGE
 
-**Result:** 2,305 providers. COST_EFFECTIVE 32 · AVERAGE 352 · HIGH_COST 112 · INSUFFICIENT_DATA 1,809. Most providers are priced
+**Result:** 2,305 providers. COST_EFFECTIVE 32 · AVERAGE 349 · HIGH_COST 115 · INSUFFICIENT_DATA 1,809. Most providers are priced
 on only 1–2 HiLabs codes in this file (median 3 among those scored), the same coverage gap C3 reports.
 
 **Limits:** price only. PTD has no quality, outcome or utilization data, so "cost-effective" here means "negotiated prices below similar
