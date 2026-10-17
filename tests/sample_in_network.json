@@ -1,0 +1,11 @@
+{"reporting_entity_name":"SYNTHETIC","reporting_entity_type":"TPA","last_updated_on":"2026-10-06","version":"2.0.0",
+ "provider_references":[
+  {"provider_group_id":1,"network_name":[],"provider_groups":[{"npi":[1111111111],"tin":{"type":"ein","value":"11-1111111","business_name":"DOC A"}}]},
+  {"provider_group_id":2,"network_name":[],"provider_groups":[{"npi":[1111111111],"tin":{"type":"ein","value":"11-1111111","business_name":"DOC A"}}]},
+  {"provider_group_id":3,"network_name":["Test Net"],"provider_groups":[{"npi":[2222222222,123],"tin":{"type":"ein","value":"22-2222222","business_name":"PPO: Test County"}}]}],
+ "in_network":[
+  {"negotiation_arrangement":"ffs","billing_code_type":"CPT","billing_code":"99213","negotiated_rates":[
+    {"provider_references":[1],"negotiated_prices":[{"negotiated_type":"negotiated","negotiated_rate":100.0,"expiration_date":"9999-12-31","billing_class":"professional","service_code":["11"]}]},
+    {"provider_references":[2,3],"negotiated_prices":[{"negotiated_type":"negotiated","negotiated_rate":120.0,"expiration_date":"9999-12-31","billing_class":"professional","service_code":["11"]}]}]},
+  {"negotiation_arrangement":"capitation","billing_code_type":"CPT","billing_code":"99214","negotiated_rates":[
+    {"provider_references":[3],"negotiated_prices":[{"negotiated_type":"derived","negotiated_rate":0,"expiration_date":"2025-01-01","billing_class":"professional"}]}]}]}

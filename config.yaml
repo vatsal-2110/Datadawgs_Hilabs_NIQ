@@ -1,0 +1,91 @@
+# Central config. All paths are relative to the project root (folder holding this file).
+paths:
+  raw: data/raw
+  raw_index: data/raw/index
+  raw_rates: data/raw/rates        # rate files, saved under their official file name
+  hilabs_xlsx: "data/raw/Rate Benchmarking Individual Weights_Hackathon.xlsx"   # HiLabs-supplied (PS section 4)
+  nucc_csv: data/raw/nucc/nucc_taxonomy_261.csv   # downloaded from sources.nucc_csv_url if missing
+  cache: data/raw/cache            # API responses (NPPES, DAC, Census) cached here
+  stage3: data/stage3
+  stage5: data/stage5
+  stage6: data/stage6
+  stage7: data/stage7
+  stage1: data/stage1
+  stage2: data/stage2
+  stage4: data/stage4
+
+http:
+  user_agent: "Mozilla/5.0 (HiLabs-PTD-hackathon pipeline)"
+  timeout_s: 120
+
+# Source: https://www.centene.com/price-transparency-files.html (links read on 2026-10-17)
+# brand  = Centene brand the index belongs to
+# name   = unique short name (local file = data/raw/index/<name>.json)
+index_files:
+  - {brand: healthnet,  name: healthnet,                       url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-30_healthnet_index.json"}
+  - {brand: ambetter,   name: ambetter,                        url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_ambetter_index.json"}
+  - {brand: fidelis,    name: fidelis,                         url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_fidelis_index.json"}
+  - {brand: qualchoice, name: qualchoice,                      url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_index.json"}
+  - {brand: qualchoice, name: qualchoice_alf_plan,             url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_alf_plan_index.json"}
+  - {brand: qualchoice, name: qualchoice_arnold_and_blevins,   url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_arnold_and_blevins_index.json"}
+  - {brand: qualchoice, name: qualchoice_big_four,             url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_big_four_index.json"}
+  - {brand: qualchoice, name: qualchoice_city_of_fort_smith,   url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_city_of_fort_smith_index.json"}
+  - {brand: qualchoice, name: qualchoice_city_of_hot_springs,  url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_city_of_hot_springs_index.json"}
+  - {brand: qualchoice, name: qualchoice_dillards,             url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_dillards_index.json"}
+  - {brand: qualchoice, name: qualchoice_jv_manufacturing,     url: "https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-09-28_qualchoice_jv_manufacturing_index.json"}
+
+scope:
+  state: CA
+  market_type: group
+  # Brand-level scope, with the evidence for each decision (Centene page note:
+  # "MHN is now included in Ambetter CA for marketplace plans and in Healthnet for commercial plans.")
+  brands:
+    healthnet:  {in_scope: true,  reason: "Centene page: Health Net carries CA commercial plans"}
+    ambetter:   {in_scope: false, reason: "Individual marketplace (ACA exchange), not commercial group"}
+    fidelis:    {in_scope: false, reason: "New York plans, out of CA scope"}
+    qualchoice: {in_scope: false, reason: "Arkansas plans, out of CA scope"}
+
+# ---------------------------------------------------------------- C5 / C6 / C3 settings
+sources:
+  nppes_api: "https://npiregistry.cms.hhs.gov/api/"                 # NPPES NPI Registry API v2.1
+  dac_query: "https://data.cms.gov/provider-data/api/1/datastore/query/mj5m-pzi6/0"   # CMS Doctors & Clinicians National Downloadable File
+  dac_meta: "https://data.cms.gov/provider-data/api/1/metastore/schemas/dataset/items/mj5m-pzi6"
+  census_batch: "https://geocoding.geo.census.gov/geocoder/geographies/addressbatch"  # US Census geocoder (address standardization)
+  census_benchmark: Public_AR_Current
+  census_vintage: Current_Current
+  nucc_csv_url: "https://www.nucc.org/images/stories/CSV/nucc_taxonomy_261.csv"
+  provider_data_query: "https://data.cms.gov/provider-data/api/1/datastore/query/{id}/0"   # CMS provider-data datastore
+  # CMS facility registries used to confirm organization addresses (C5): id, name/address/npi columns
+  facility_registries:
+    - {id: xubh-q36u, label: CMS_HOSPITAL, name: facility_name, address: address,          city: citytown,     state: state,        zip: zip_code}
+    - {id: 4jcv-atw7, label: CMS_ASC,      name: facility_name, npi: npi,                  city: citytown,     state: state,        zip: zip_code}
+    - {id: ct36-nrcq, label: CMS_DME,      name: businessname,  address: practiceaddress1, city: practicecity, state: practicestate, zip: practicezip9code, alt_name: practicename}
+    - {id: 6jpm-sxkc, label: CMS_HHA,      name: provider_name, address: address,          city: citytown,     state: state,        zip: zip_code}
+
+http_pool:
+  workers: 8            # parallel API requests
+  pause_s: 0.05         # pause per request per worker (politeness)
+  dac_batch: 100        # NPIs per DAC 'in' query
+  census_batch: 2000    # addresses per Census batch request
+
+address:
+  nppes_fresh_months: 24      # NPPES record updated within this many months counts as "current"
+
+grading:
+  # C3 files to grade: the in-scope file(s) plus comparison files (matched on file_name substring)
+  compare_files: ["healthnet-or_in-network", "ambetter-ca_in-network"]
+
+specialty:
+  # Facility taxonomies -> HiLabs facility specialty codes (sheet "Spec-Proc Weights"); every taxonomy
+  # code verified present in the NUCC CSV (v26.1). Used only when the NPI's own taxonomy is not in the
+  # HiLabs Taxonomy-Spec Xwalk.
+  facility_taxonomy_map:
+    261QA1903X: "045"   # Clinic/Center, Ambulatory Surgical -> Surgical Services (Outpatient and ASC)
+    261QU0200X: "080"   # Clinic/Center, Urgent Care -> Urgent Care
+    314000000X: "046"   # Skilled Nursing Facility -> Skilled Nursing Facilities
+    283Q00000X: "052"   # Psychiatric Hospital -> Inpatient Psychiatry
+    273R00000X: "052"   # Psychiatric Unit -> Inpatient Psychiatry
+    324500000X: "072"   # Substance Abuse Rehabilitation Facility -> SUD Rehabilitation Facility
+    261QR0405X: "072"   # Clinic/Center, Rehabilitation, Substance Use Disorder -> SUD Rehabilitation Facility
+    323P00000X: "P076"  # Psychiatric Residential Treatment Facility -> Children's Residential Treatment
+  code_profile_min_ratio: 1.5   # code-profile fallback: top specialty score must be >= 1.5 x the runner-up

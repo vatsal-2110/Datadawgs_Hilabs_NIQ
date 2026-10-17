@@ -1,0 +1,30 @@
+{
+  "reporting_entity_name": "SYNTHETIC TEST",
+  "reporting_entity_type": "Third Party Administrator",
+  "reporting_structure": [
+    {
+      "reporting_plans": [
+        {"plan_name": "CA L PPO 30/500/4000/30%", "plan_id_type": "ein", "plan_id": "111111112", "plan_market_type": "group", "issuer_name": "Healthnet, LLC", "plan_sponsor_name": "Healthnet, LLC"},
+        {"plan_name": "Gold PPO 500/20", "plan_id_type": "ein", "plan_id": "67138CA073", "plan_market_type": "group", "issuer_name": "Healthnet, LLC", "plan_sponsor_name": "Healthnet, LLC"},
+        {"plan_name": "CA L PPO 30/500/4000/30%", "plan_id_type": "ein", "plan_id": "999999999", "plan_market_type": "group", "issuer_name": "Healthnet, LLC", "plan_sponsor_name": "Healthnet, LLC"}
+      ],
+      "in_network_files": [
+        {"description": "PPO in-network", "location": "https://example.com/mrf/2026-09-01_PPO_in-network-rates.json.gz?sig=AAA"}
+      ],
+      "allowed_amount_file": {"description": "allowed amounts", "location": "https://example.com/mrf/2026-09-01_allowed-amounts.json"}
+    },
+    {
+      "reporting_plans": [
+        {"plan_name": "CA L SC HMO 50/1500d/7500", "plan_id_type": "ein", "plan_id": "222222223", "plan_market_type": "group", "issuer_name": "Healthnet, LLC", "plan_sponsor_name": "Healthnet, LLC"},
+        {"plan_name": "Some Individual Plan", "plan_id_type": "hios", "plan_id": "12345TX001", "plan_market_type": "individual", "issuer_name": "Other", "plan_sponsor_name": "Other"}
+      ],
+      "in_network_files": [
+        {"description": "HMO in-network", "location": "https://example.com/mrf/2026-09-01_HMO_in-network-rates.json.gz"},
+        {"description": "PPO in-network", "location": "https://example.com/mrf/2026-09-01_PPO_in-network-rates.json.gz?sig=BBB"}
+      ],
+      "allowed_amount_file": {"description": "allowed amounts", "location": "https://example.com/mrf/2026-09-01_allowed-amounts.json"}
+    }
+  ],
+  "version": "2.0.0",
+  "last_updated_on": "2026-09-30"
+}
