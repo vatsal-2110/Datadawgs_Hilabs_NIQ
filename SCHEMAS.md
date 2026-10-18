@@ -42,6 +42,35 @@ plan_row_id, structure_id, file_key, file_role
 ### `data/stage1/index_files.parquet`
 index_name, brand, url, local_path, bytes, sha256, parsed_at, n_structures, n_plan_rows, last_updated_on, reporting_entity_name, reporting_entity_type, version, identical_to
 
+### C1 scope evidence (`python -m src.stage1_scope_evidence`)
+`data/stage1/scope_evidence.parquet`: one row per reporting structure: brand, structure_id, n_plans, market,
+in_network_files, geo_* (NPPES practice state of the file's providers), employer_* (DOL Form 5500 sponsor state of the
+plan EINs), hios_* (issuer company / state), E1_market_group, E2_providers, E3_employers, E4_issuer, verdict.
+`data/stage1/scope_evidence_plans.parquet`: one row per plan: hios_issuer(_entity/_state), ein, sponsor_state, sponsor_name.
+
+### Excel deliverables (`python -m src.export_c1_c2_excel`)
+`data/stage1/C1_index_plans_and_files.xlsx` and `data/stage2/C2_ppo_network.xlsx` (sheet contents in each Read Me sheet).
+
+## Stage 2 — C2 final decisions
+`data/stage2/ppo_network_decisions.csv` (+ parquet) and the same columns in `data/stage2/plan_labels.csv`:
+| column | meaning |
+|---|---|
+| final_network_use | PPO_NETWORK_PRIMARY / PPO_NETWORK_TIER (EOA, POS) / HMO_NETWORK_ONLY / EPO_NETWORK |
+| is_ppo_network | true = PPO_NETWORK_PRIMARY |
+| decided_by | PLAN_DESIGN (Health Net 2026 plan overview / earlier-year design) · OWN_SBC · HSA_DESIGN · NETWORK_BRAND · PRODUCT_DOCUMENT · PLAN_NAME_ONLY |
+| evidence | the deciding evidence in words (design, what its plan document says, result) |
+| cross_checks | HIOS product, employer DOL Form 5500 Schedule A, and the plan-name word (agrees / differs): not used to decide |
+| sources | URL of the exact Health Net plan document / SBC / regulator filing used |
+| name_evidence (plan_labels only) | the original plan-name reasoning |
+
+## Stage 2 — C2 evidence
+`data/stage2/plan_label_evidence.parquet` (`python -m src.stage2_network_evidence`): per in-scope plan: product_type,
+hios_product, t2_product_pure, sched_a_hmo / sched_a_ppo (employer Form 5500 Schedule A), t3_employer_agrees, t4_entity,
+t4_regulator, t4_network, t4_source, evidence_confidence (HIGH / MEDIUM / REVIEW).
+`data/stage2/provider_network_evidence.parquet` (`python -m src.stage2_provider_network`): per (npi, tin): g_non_hmo_county,
+g_counties, l_ppo_label, c_capitation, h_hmo_label, has_rates, ppo_network_evidence (PPO_CONFIRMED / HMO_SIGNAL / MIXED /
+PPO_PRESUMED), ppo_evidence_detail. Carried into the rate file as `ppo_network_evidence`, `ppo_evidence_detail`.
+
 ## Stage 4 — hand-off to Member B (`python -m src.stage4_tin_npi_pairs`)
 
 ### `data/stage4/tin_npi_pairs.parquet` (+ `.csv`)
@@ -66,22 +95,28 @@ One row per (npi, tin, file_key) found in the in-scope in-network file(s). No ra
 
 **Note for Member B:** when `business_names` is a label (e.g. "HEALTH NET DIRECT FFS COMMERCIAL", "PPO: Los Angeles County"), it is **not** the organization's name. Use NPPES / CMS for the real name and address.
 
-### `data/stage4/rates.parquet` (+ `.csv`) — C4 output (`python -m src.stage4_extract_rates`)
-One row per (npi, tin, billing_code_type, billing_code, item_name, billing_class, modifier, service_code, additional_information, file_key).
+### `data/stage4/rates_all.parquet` / `rates.parquet` (+ `.csv`) — C4 output (`python -m src.stage4_extract_rates`)
+`rates_all` = every in-network price, every code type (CPT, HCPCS, RC), every provider. `rates` = its HiLabs-code subset
+(professional and facility), used by C5 specialty, C6 and C7. One row per (npi, tin, billing_code_type, billing_code,
+item_name, billing_class, modifier, service_code, revenue_code, negotiation_arrangement, file_key).
 
 | column | type | meaning |
 |---|---|---|
 | npi | str (10) or null | null = TIN-only contract (placeholder NPI 0 in the file) |
 | tin | str (9) | |
-| billing_code_type / billing_code | str | CPT or HCPCS / the code (only HiLabs codes) |
-| item_name | str | `name` of the in_network item (needed: one code can carry different services) |
-| billing_class | str | professional (all rows in the current file) |
+| billing_code_type / billing_code | str | CPT / HCPCS / RC and the code. For a facility price decoded from an RC item, the CPT/HCPCS code named in its `additional_information` |
+| item_name | str | `name` of the in_network item; for decoded facility prices "facility price under revenue code N" (the RC item names are in `source_items`) |
+| billing_class / component | str | professional / institutional; component = professional / facility |
+| revenue_code | str | RC the facility price was filed under ('' for professional prices) |
+| source_items | str | in_network items that carried this price (`<type> <code> <name>`) |
 | modifier | str | billing_code_modifier values, `\|`-joined ('' if none) |
 | service_code | str | place-of-service codes, `\|`-joined (e.g. `11` office, `22` outpatient hospital) |
-| additional_information | str | sub-code from the file, if any |
-| rate | float | **median** of the dollar prices for this key |
+| rate | float | price in the **primary contract** (provider_reference pricing the most services); median if tied |
+| primary_contract | int | that provider_reference id |
+| rate_source | str | `single contract` or `primary of N contracts` |
+| rate_median_all | float | median over all contracts pricing this key |
 | rate_min / rate_max | float | lowest / highest price for this key |
-| n_rates / n_distinct_rates | int | prices combined / distinct values among them |
+| n_rates / n_contracts / n_distinct_rates | int | prices / contracts / distinct contract-level prices |
 | rate_spread_ratio | float | rate_max / rate_min (1.0 = all identical) |
 | negotiated_types | str | e.g. `negotiated`, `fee schedule` |
 | expiration_date | str | latest expiration_date seen |
@@ -90,7 +125,18 @@ One row per (npi, tin, billing_code_type, billing_code, item_name, billing_class
 | in_capitation_code | bool | priced under a capitation item |
 | tin_type | str | ein |
 | hilabs_spec_cds | str | HiLabs SPEC_CD values whose list contains this code, comma-joined |
-| file_key | str | join key to `data/stage1/files.parquet` |
+| file_key / file_date | str | join key to `data/stage1/files.parquet` / the file's last_updated_on |
+| is_hilabs_code | bool | (rates_all only) code is in the HiLabs list |
+| medicare_rate / medicare_source / medicare_locality | float / str / str | (rates only, added by `src.stage4_medicare_benchmark`) Medicare 2026 price: PFS for the provider's CA locality (professional) or OPPS national (facility) |
+| pct_of_medicare | float | rate / medicare_rate × 100 |
+| peer_robust_z | float | 0.6745 × (log rate − median) / MAD among rows with the same code, component, modifier (groups ≥ 5) |
+| rate_check | str | OK or HIGH_VS_PEERS / LOW_VS_PEERS / ABOVE_10X_MEDICARE / BELOW_30PCT_MEDICARE (kept, not dropped) |
+
+### `data/stage4/oon_allowed.parquet` (+ `.csv`), `oon_vs_in_network.parquet`
+Out-of-network allowed amounts from the PPO plans' allowed-amounts file: one row per (billing_code, tin, npi, payment):
+billing_code_type, billing_code, item_name, tin, npi, service_code, billing_class, allowed_amount, billed_charge, file_key.
+`oon_vs_in_network`: per (billing_code, billing_class), in_network_median, in_network_providers, oon_allowed_median,
+oon_billed_median, oon_payments, oon_providers, oon_to_in_network_ratio, is_hilabs_code.
 
 ## Stage 2 — plan labels (`python -m src.stage2_plan_labels`)
 `data/stage2/plan_labels.parquet` (+ `.csv`): one row per in-scope plan row. Key columns: plan_row_id, plan_key, plan_name, plan_id, product_type (PPO/HMO/EPO/POS/EOA_HYBRID/UNKNOWN), provider_network (PPO_NETWORK / PPO_NETWORK_INFERRED / HMO_NETWORK / HMO_NETWORK+PPO_SPECIALISTS / UNCONFIRMED), is_ppo, uses_ppo_network, uses_ppo_network_incl_inferred, confidence, rule, evidence, source.

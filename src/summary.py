@@ -52,6 +52,18 @@ def main():
                                   "unique_tins": int(len(tins))},
         "rates_extracted": {"rate_rows": int(len(rates)), "billing_codes": int(rates.billing_code.nunique()),
                             "unique_npis": int(rates.npi.nunique()), "unique_tins": int(rates.tin.nunique())},
+        "rates_all_codes": (lambda a: {"rate_rows": int(len(a)), "unique_npis": int(a.npi.nunique()),
+                                       "billing_codes": int(a.billing_code.nunique()),
+                                       "by_component": a.component.value_counts().to_dict()})(
+            pd.read_parquet(P["stage4"] / "rates_all.parquet", columns=["npi", "billing_code", "component"]))
+            if (P["stage4"] / "rates_all.parquet").exists() else None,
+        "hilabs_rates_by_component": rates.groupby("component").billing_code.nunique().to_dict()
+                                     if "component" in rates else None,
+        "out_of_network": (lambda o, b: {"payments": int(len(o)), "codes": int(o.billing_code.nunique()),
+                                         "npis": int(o.npi.nunique()), "codes_also_in_network": int(len(b)),
+                                         "median_oon_allowed_to_in_network": float(b.oon_to_in_network_ratio.median())})(
+            pd.read_parquet(P["stage4"] / "oon_allowed.parquet"), pd.read_parquet(P["stage4"] / "oon_vs_in_network.parquet"))
+            if (P["stage4"] / "oon_allowed.parquet").exists() else None,
         "final_rate_file": {"rows": int(len(rf)), "unique_npis": int(len(rf_npis)), "unique_tins": int(rf.TIN.nunique()),
                             "unique_addresses": int(rf.Address.nunique()), "billing_codes": int(rf["Billing Code"].nunique()),
                             "rows_by_address_tier": rf.address_tier.value_counts().to_dict()},
@@ -63,6 +75,15 @@ def main():
             "best_address_tier_per_pair": addr[addr.is_best].tier.value_counts().to_dict()},
         "address_baseline_vs_pipeline": (json.loads((P["stage5"] / "c5_audit.json").read_text(encoding="utf-8"))
                                          ["C_baseline_vs_pipeline"] if (P["stage5"] / "c5_audit.json").exists() else None),
+        "plan_network_use": (pd.crosstab(pd.read_parquet(P["stage2"] / "plan_network_prediction.parquet").final_network_use,
+                                         pd.read_parquet(P["stage2"] / "plan_network_prediction.parquet").basis)
+                             .to_dict(orient="index")
+                             if (P["stage2"] / "plan_network_prediction.parquet").exists() else None),
+        "ppo_network_evidence_pairs": (pd.read_parquet(P["stage2"] / "provider_network_evidence.parquet")
+                                       .ppo_network_evidence.value_counts().to_dict()
+                                       if (P["stage2"] / "provider_network_evidence.parquet").exists() else None),
+        "rate_rows_by_ppo_evidence": rf.ppo_network_evidence.value_counts().to_dict()
+                                     if "ppo_network_evidence" in rf else None,
         "specialty_sources": spec.specialty_source.value_counts().to_dict(),
         "cost_effectiveness_labels": ce.label.value_counts().to_dict() if ce is not None else None,
     }
@@ -76,12 +97,14 @@ def main():
           f"| Plan rows in index files | {S['plan_rows']:,} |",
           f"| Unique rate files (after removing {S['duplicate_file_references_removed']} duplicate references) | {S['unique_rate_files']} |",
           f"| CA commercial group plans | {S['ca_commercial_group_plans']:,} |",
-          f"| **PPO plans identified** | **{S['ppo_plans']}** ({S['ppo_plans_incl_epo_on_inferred_ppo_network']} if the "
-          f"{S['ppo_plans_incl_epo_on_inferred_ppo_network'] - S['ppo_plans']} EPO plans on the inferred PPO network are added) |",
+          f"| **PPO plans identified** | **{S['ppo_plans']}** (evidence: `data/stage2/c2_network_evidence.txt`) |",
           f"| Plans ruled out (not PPO) | " + ", ".join(f"{k} {v}" for k, v in S['plans_ruled_out'].items()) + " |",
           f"| **PPO rate files** | **{len(S['ppo_rate_files'])}**: {', '.join(S['ppo_rate_files'])} |",
           f"| Providers in the PPO file | {S['providers_in_ppo_file']['unique_npis']:,} NPIs, {S['providers_in_ppo_file']['unique_tins']:,} TINs ({S['providers_in_ppo_file']['npi_tin_pairs']:,} pairs) |",
           f"| Rates extracted (HiLabs codes) | {S['rates_extracted']['rate_rows']:,} rows, {S['rates_extracted']['billing_codes']} codes, {S['rates_extracted']['unique_npis']:,} NPIs, {S['rates_extracted']['unique_tins']:,} TINs |",
+          *([f"| All in-network prices (every code type) | {S['rates_all_codes']['rate_rows']:,} rows, {S['rates_all_codes']['billing_codes']:,} codes, {S['rates_all_codes']['unique_npis']:,} NPIs (every provider in the file) |"] if S.get("rates_all_codes") else []),
+          *([f"| HiLabs codes priced by component | {S['hilabs_rates_by_component']} (facility = decoded revenue-code prices) |"] if S.get("hilabs_rates_by_component") else []),
+          *([f"| Out-of-network allowed amounts (separate table) | {S['out_of_network']['payments']:,} payments, {S['out_of_network']['codes']} codes; median OON allowed / in-network rate {S['out_of_network']['median_oon_allowed_to_in_network']:.1f}x over {S['out_of_network']['codes_also_in_network']} shared codes |"] if S.get("out_of_network") else []),
           f"| Final rate file | {S['final_rate_file']['rows']:,} rows, {S['final_rate_file']['unique_npis']:,} NPIs, {S['final_rate_file']['unique_tins']:,} TINs, {S['final_rate_file']['unique_addresses']:,} addresses |",
           f"| **NPIs linked to a VERIFIED address** | **{al['pct_npis_with_verified_address']}%** (verified or probable: {al['pct_npis_with_verified_or_probable']}%) |",
           f"| **TINs linked to a VERIFIED address** | **{al['pct_tins_with_verified_address']}%** (verified or probable: {al['pct_tins_with_verified_or_probable']}%) |"]
@@ -91,6 +114,16 @@ def main():
                f"(pipeline: {bv['pct_pipeline_verified']}%; {bv['verified_only_at_non_nppes_primary_address']} NPIs verified only "
                f"at a non-NPPES-primary address; {bv['pairs_best_address_not_nppes_primary']} pairs whose best address is not "
                f"the NPPES primary) |"]
+    if S["plan_network_use"]:
+        nu = S["plan_network_use"]
+        md += ["| **Plan network use (C2, from plan design + Health Net plan documents)** | "
+               + "; ".join(f"{k}: {sum(v.values()):,} ({v.get('EVIDENCE', 0) + v.get('PRODUCT_DOCUMENT', 0):,} from "
+                           f"evidence, {v.get('NAME_ONLY', 0):,} name only)" for k, v in nu.items())
+               + " (`data/stage2/c2_plan_design.txt`) |"]
+    if S["ppo_network_evidence_pairs"]:
+        md += [f"| PPO-network evidence per provider pair (C2) | "
+               + ", ".join(f"{k} {v:,}" for k, v in S["ppo_network_evidence_pairs"].items())
+               + " (rules: `docs/logic_ppo_network.md` §4.1) |"]
     md += ["", "## File quality scores (C3)", "", "| File | Role | Overall (0-100) |", "|---|---|---|"]
     md += [f"| {s['file_name']} | {s['role']} | {s['overall_score']} |" for s in S["file_quality_scores"]]
     md += ["", "## Specialty sources", "", ", ".join(f"{k}: {v:,}" for k, v in S["specialty_sources"].items())]

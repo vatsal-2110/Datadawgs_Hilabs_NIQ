@@ -6,6 +6,8 @@ paths:
   hilabs_xlsx: "data/raw/Rate Benchmarking Individual Weights_Hackathon.xlsx"   # HiLabs-supplied (PS section 4)
   nucc_csv: data/raw/nucc/nucc_taxonomy_261.csv   # downloaded from sources.nucc_csv_url if missing
   cache: data/raw/cache            # API responses (NPPES, DAC, Census) cached here
+  dol: data/raw/dol                # US DOL Form 5500 / 5500-SF datasets (sources.dol_5500_*)
+  healthnet_docs: data/raw/healthnet   # Health Net broker pages + 2026 plan documents (C2 design test)
   stage3: data/stage3
   stage5: data/stage5
   stage6: data/stage6
@@ -13,6 +15,8 @@ paths:
   stage1: data/stage1
   stage2: data/stage2
   stage4: data/stage4
+  cms_pfs: data/raw/cms_pfs
+  cms_opps: data/raw/cms_opps
 
 http:
   user_agent: "Mozilla/5.0 (HiLabs-PTD-hackathon pipeline)"
@@ -61,6 +65,100 @@ sources:
     - {id: 4jcv-atw7, label: CMS_ASC,      name: facility_name, npi: npi,                  city: citytown,     state: state,        zip: zip_code}
     - {id: ct36-nrcq, label: CMS_DME,      name: businessname,  address: practiceaddress1, city: practicecity, state: practicestate, zip: practicezip9code, alt_name: practicename}
     - {id: 6jpm-sxkc, label: CMS_HHA,      name: provider_name, address: address,          city: citytown,     state: state,        zip: zip_code}
+
+  # CMS Medicare benchmarks for C4 rate plausibility (src.stage4_medicare_benchmark)
+  cms_pfs_rvu_zip: "https://www.cms.gov/files/zip/rvu26d.zip"                 # 2026 Physician Fee Schedule RVUs + GPCIs + localities (Oct release)
+  cms_opps_addenda_zip: "https://www.cms.gov/files/zip/2026-nfrm-opps-addenda.zip"   # CY2026 OPPS final rule addenda (Addendum B)
+
+  # US Dept. of Labor EBSA Form 5500 FOIA datasets: plan sponsor EIN -> sponsor state (C1 evidence E3)
+  dol_5500_urls:
+    - "https://www.askebsa.dol.gov/FOIA%20Files/2024/Latest/F_5500_2024_Latest.zip"
+    - "https://www.askebsa.dol.gov/FOIA%20Files/2024/Latest/F_5500_SF_2024_Latest.zip"
+    - "https://www.askebsa.dol.gov/FOIA%20Files/2023/Latest/F_5500_2023_Latest.zip"
+    - "https://www.askebsa.dol.gov/FOIA%20Files/2023/Latest/F_5500_SF_2023_Latest.zip"
+    # Schedule A (insurance contracts, with HMO / PPO benefit-type boxes): C2 evidence T3
+    - "https://www.askebsa.dol.gov/FOIA%20Files/2024/Latest/F_SCH_A_2024_Latest.zip"
+    - "https://www.askebsa.dol.gov/FOIA%20Files/2023/Latest/F_SCH_A_2023_Latest.zip"
+
+# Third-party evidence used by C1/C2 (read 2026-10-18). Every entry names the public document it comes from.
+evidence:
+  hios_issuers:   # HIOS issuer ID (first 5 digits of a HIOS plan ID) -> licensed company and state
+    "67138": {entity: "Health Net of California, Inc.", state: CA,
+              source: "https://www.cms.gov/files/document/ppfmg-ea-healthnetcalifornia-67138-2019-hcrp-5cr-013025.pdf"}
+    "10940": {entity: "Health Net Health Plan of Oregon, Inc.", state: OR,
+              source: "https://dfr.oregon.gov/healthrates/Documents/rhea-quarterly-plans/rhea-plan-list-q4-2021.pdf"}
+    "37903": {entity: "QualChoice Life and Health Insurance Company, Inc.", state: AR,
+              source: "https://www.insurance.arkansas.gov/site/assets/files/4098/7_qualchoice_individual_on-off_exchange_filing_quac-133639093_final.pdf"}
+    "70525": {entity: "QCA Health Plan, Inc.", state: AR,
+              source: "https://ratereview.healthcare.gov/files/2069817_70525_20210802_2022_AR_Indiv_AM_Redacted.pdf"}
+    "25303": {entity: "New York Quality Healthcare Corporation (Fidelis Care)", state: NY,
+              source: "https://myportal.dfs.ny.gov/documents/538523/20507878/NYQHC_IND_BOTHX_FCNY-132377234_Appr_RateMan.pdf"}
+
+  # Health Net's public broker libraries: every 2026 plan design with its official plan document (large group plan
+  # overviews, small group Summaries of Benefits and Coverage). C2 plan-design test (src.stage2_plan_design_evidence).
+  healthnet_broker_pages:
+    large: "https://www.healthnet.com/en_us/brokers/forms-brochures/large-group.html"
+    small: "https://www.healthnet.com/en_us/brokers/forms-brochures/small-group.html"
+  healthnet_doc_base: "https://www.healthnet.com"
+  # Plan-name codes for Health Net tailored networks (inferred from name co-occurrence + Health Net network names)
+  tailored_network_codes: {SC: SmartCare, EC: ExcelCare, SAL: Salud, WC: WholeCare}
+  # A design whose out-of-pocket max is at or above this value is treated as "at the legal maximum" and matched on
+  # copay / deductible / coinsurance only (federal OOP maximums: 2024 $9,450, 2025 $9,200)
+  legal_max_oop_floor: 9000
+  # Products with no design catalog: the document that defines them (used for every POS / EPO plan)
+  product_documents:
+    POS:
+      text: "Health Net SELECT POS = HMO option + PPO option + out-of-network (flyer FLY032979EP01), offered by Health Net of California (DMHC)"
+      url: "https://www.healthnet.com/content/dam/centene/healthnet/pdfs/broker/ca/general/pos-flyer-eng.pdf"
+    EPO:
+      text: "Health Net EPO runs on the separate PureCare One EPO network (CA Department of Insurance network-waiver filing)"
+      url: "https://www.insurance.ca.gov/01-consumers/110-health/10-basics/upload/Network-Waiver-Health-Net-SBG-PureCare-One-EPO-PF-2018-01437-2.pdf"
+  # Health Net of California HMO service area (CA Office of the Patient Advocate report card, 2025-26 edition):
+  # 31 counties. The same source lists the Health Net PPO service area as "All of California". A provider practising
+  # in a CA county outside this list can only serve Health Net members through the PPO network (C2 provider test).
+  hmo_service_area:
+    source: "https://reportcard.opa.ca.gov/rc/profile.aspx?EntityType=HMO&Entity=HEALTH_NET"
+    ppo_source: "https://reportcard.opa.ca.gov/rc/profile.aspx?EntityType=PPO&Entity=HEALTH_NET_PPO"
+    counties: [Alameda, Contra Costa, El Dorado, Fresno, Imperial, Kern, Kings, Los Angeles, Madera, Marin, Merced,
+               Napa, Nevada, Orange, Placer, Riverside, Sacramento, San Bernardino, San Diego, San Francisco,
+               San Joaquin, San Mateo, Santa Barbara, Santa Clara, Santa Cruz, Solano, Sonoma, Stanislaus, Tulare,
+               Ventura, Yolo]
+  # Business-name labels in the rate file that state a network (found by stage4_tin_npi_pairs.business_label)
+  ppo_labels: [PPO_COUNTY, HEALTHNET_PPO, AMBETTER_PPO]
+  hmo_labels: [AMBETTER_HMO, IPA]
+  # What each Health Net CA product type IS: legal entity, regulator and provider network, from Health Net's own
+  # documents and California regulator filings (C2 test T4). quote = verbatim text from the source.
+  product_types:
+    PPO:
+      entity: "Health Net Life Insurance Company (NAIC 66141)"
+      regulator: "California Department of Insurance"
+      network: "Health Net PPO Network"
+      quote: "For PPO and EPO plans underwritten by Health Net Life Insurance Company: You may submit a complaint by calling the California Department of Insurance"
+      source: "https://sfhss.healthnetcalifornia.com/content/dam/centene/healthnet/pdfs/member/ca/comm_claim_form_ca_eng.pdf"
+    HMO:
+      entity: "Health Net of California, Inc. (DMHC Knox-Keene license 933-0300)"
+      regulator: "California Department of Managed Health Care"
+      network: "HMO network (Full Network or a tailored HMO network: SmartCare, ExcelCare, WholeCare, Salud HMO y Mas)"
+      quote: "All plans are tied to our HMO provider network."
+      source: "https://www.healthnet.com/content/healthnet/en_us/find-a-plan/large-employers/type-of-plans.html"
+    EOA_HYBRID:
+      entity: "Health Net of California, Inc."
+      regulator: "California Department of Managed Health Care"
+      network: "Full HMO Network or ExcelCare tailored HMO network; PPO tier = office-based specialist visits only"
+      quote: "Elect Open Access (EOA) is an HMO plan ... EOA products are available with our full HMO Network or our ExcelCare tailored network ... If a member needs specialist care, surgery or hospital services, the PCP will make arrangements with his or her participating physician group ... EOA plans are offered by Health Net of California, Inc."
+      source: "https://www.healthnet.com/content/dam/centene/healthnet/pdfs/broker/ca/large/fb/2026/hn-broker-eoa-flyer-2026.pdf"
+    POS:
+      entity: "Health Net of California, Inc."
+      regulator: "California Department of Managed Health Care"
+      network: "HMO network tier plus out-of-network tier(s)"
+      quote: "For HMO, HSP, EOA, and POS plans offered through Health Net of California, Inc. ... Department of Managed Health Care (DMHC)"
+      source: "https://sfhss.healthnetcalifornia.com/content/dam/centene/healthnet/pdfs/member/ca/comm_claim_form_ca_eng.pdf"
+    EPO:
+      entity: "Health Net Life Insurance Company"
+      regulator: "California Department of Insurance"
+      network: "PureCare One EPO network (a separate network, not the PPO network)"
+      quote: "Network Waivers for Health Net SBG PureCare One EPO (California Department of Insurance filing)"
+      source: "https://www.insurance.ca.gov/01-consumers/110-health/10-basics/upload/Network-Waiver-Health-Net-SBG-PureCare-One-EPO-PF-2018-01437-2.pdf"
 
 http_pool:
   workers: 8            # parallel API requests

@@ -7,6 +7,9 @@ files, maps every provider to **practicing addresses** with evidence tiers, and 
 | Deliverable | Where |
 |---|---|
 | 1. Rate file (Excel) | `data/stage6/provider_rate_file.xlsx` (sheets: Rate File, Rate Variants, Read Me) |
+| C1 table (Excel) | `data/stage1/C1_index_plans_and_files.xlsx`: plan → rate file table, unique files, scope evidence |
+| C2 PPO decisions (CSV) | `data/stage2/ppo_network_decisions.csv`: one row per CA plan: final network use, PPO yes/no, the factor that decided it, full evidence, cross-checks and source URLs (also written into `data/stage2/plan_labels.csv`) |
+| C2 PPO network (Excel) | `data/stage2/C2_ppo_network.xlsx`: plan labels with evidence, 453 PPO plans, HIOS / Schedule A tests, provider-level PPO evidence, product-type sources |
 | 2. Logic file | `docs/logic_ppo_network.md` (A: PPO network) + `docs/logic_address_mapping.md` (B: TIN → NPI → address, specialty) + `docs/logic_rate_file_c6_c7.md` (C: rate file, cost effectiveness) |
 | 3. File quality metrics | `docs/file_quality_metrics.md` (+ scores in `data/stage3/file_scores.csv`) |
 | 4. Summary file | `docs/summary.md` (+ `data/summary.json`), generated from the run |
@@ -42,10 +45,14 @@ browser into `data/raw/index/<name>.json`.
 | Stage | Module | What it does |
 |---|---|---|
 | C1 | `src.stage1_ingest_index` | streams 11 index files → plans, unique rate files (URL dedup), scope flags with reasons |
+| C1 | `src.stage1_scope_evidence` | proves the CA / group scope per reporting structure with third-party data: provider locations (NPPES), employer locations (DOL Form 5500), HIOS issuers (regulator filings) |
 | C2 step 0 | `src.stage2_profile_rate_file` | facts about the in-scope rate file (one price list per provider, labels, coverage) |
 | hand-off | `src.stage4_tin_npi_pairs` | every (NPI, TIN) in the PPO file, with business-name network hints |
 | C2 | `src.stage2_plan_labels` | labels every CA plan: product type + provider network, with evidence and confidence |
-| C4 | `src.stage4_extract_rates` | streams the rate file, keeps HiLabs codes, dollar rates, median per provider × service |
+| C2 | `src.stage2_provider_network` | PPO-network evidence per provider: practice county outside the HMO service area, PPO / HMO labels, capitation, price signature; carried into the rate file |
+| C2 | `src.stage2_network_evidence` | tests the labels against regulator product IDs (HIOS), employer Form 5500 Schedule A HMO/PPO declarations, and the documented legal entity / network of each product type |
+| C4+ | `src.stage4_medicare_benchmark` | every rate vs Medicare 2026 (own CA locality PFS / OPPS) and robust peer outliers → `pct_of_medicare`, `rate_check` |
+| C4 | `src.stage4_extract_rates` | streams the rate file: every price for every provider; decodes facility (RC) prices to their CPT/HCPCS code; one rate per service from the provider's primary contract; out-of-network allowed amounts as a separate table + benchmark |
 | C3 | `src.stage3_grade_files` | grades the used file + same-payer comparison files, **in parallel**, 7 weighted metrics |
 | C5 | `src.stage5_fetch_sources` | NPPES API + CMS Doctors & Clinicians, **parallel and cached** |
 | C5 | `src.stage5_address_map` | candidate addresses → shared standardizer (`src/common/address.py`) + Census geocoder → evidence → VERIFIED / PROBABLE / UNVERIFIED |
@@ -72,4 +79,6 @@ browser into `data/raw/index/<name>.json`.
 | CMS Doctors & Clinicians (monthly) | Medicare-enrolled practice addresses and group names: a fresher, independent address source |
 | US Census geocoder | address standardization and existence check; county for peer groups |
 | NUCC taxonomy CSV | taxonomy code descriptions; verifies the facility-specialty map |
-| Health Net public plan pages / EOA flyer / EPO handbook | meaning of EOA and EPO (plan-type evidence) |
+| Health Net public plan pages / EOA flyer / member form FRM049776EC01 | which company, regulator and network each product type uses (EOA/POS/HMO = Health Net of California on the HMO network; PPO = Health Net Life on the PPO network) |
+| US Dept. of Labor Form 5500, 5500-SF, Schedule A (2023–2024) | employer location (C1 scope) and employer-declared HMO / PPO contracts (C2 check); downloaded automatically |
+| CMS / state regulator filings (HIOS issuers 67138, 10940, 37903, 70525, 25303; CDI EPO network filing; DMHC license) | which licensed company and state each plan ID belongs to; EPO uses its own network |

@@ -19,7 +19,7 @@ Each metric is a percentage (0–100, higher = better). Overall = weighted mean.
 
 | # | Metric | Calculation | Why it matters | Weight |
 |---|---|---|---|---|
-| M1 | **Code coverage** | Σ HiLabs weight of codes with ≥1 positive dollar price ÷ Σ HiLabs weight of all 583 codes (sheet "Spec-Proc Weights") | A file is only useful for benchmarking if it prices the services that matter. Weighting by HiLabs' own weights means missing a high-volume code (99214) costs more than missing a rare one. Count-based coverage is reported too | **25** |
+| M1 | **Code coverage** | Σ HiLabs weight of codes with ≥1 positive dollar price (including facility prices filed under a revenue code that name the CPT/HCPCS code in `additional_information`) ÷ Σ HiLabs weight of all 583 codes (sheet "Spec-Proc Weights") | A file is only useful for benchmarking if it prices the services that matter. Weighting by HiLabs' own weights means missing a high-volume code (99214) costs more than missing a rare one. Count-based coverage is reported too | **25** |
 | M2 | **Provider detail** | Share of NPIs that are individuals (NPPES Type 1), from a fixed random sample of 200 NPIs per file (seed 7), looked up in the NPPES API | Rates are compared clinician by clinician. A file listing only organization NPIs hides who delivers care, so rates can't be tied to a specialty or practice address (the problem Member B found: UC Regents appears with a few NPIs, Medicare lists thousands) | **15** |
 | M3 | **Rate validity** | 100 − % prices ≤ $0 or missing − % robust outliers. Outlier = modified z-score > 3.5 (Iglewicz & Hoaglin: 0.6745·(x − median)/MAD) within the same service (code, item, billing class, place of service, modifier, sub-code, rate type), groups ≥ 10 prices | $0 and extreme values distort medians and benchmarks. Median/MAD resists the outliers it is looking for; grouping by service avoids flagging legitimately different services | **15** |
 | M4 | **Usable rate types** | % prices whose `negotiated_type` is a dollar amount (negotiated, fee schedule, derived) | Percentage-of-charges and per-diem rates can't be compared with fee-for-service dollars without extra data | **10** |
@@ -46,7 +46,7 @@ touching the metric code.
 
 | File | Role | **Overall** | M1 code cov. | M2 provider detail | M3 validity | M4 types | M5 unique | M6 fresh | M7 IDs |
 |---|---|---|---|---|---|---|---|---|---|
-| Health Net CA in-network | **used** | **79.2** | 68.8 | 20.1 | 94.3 | 100 | 98.8 | 100 | 99.96 |
+| Health Net CA in-network | **used** | **81.0** | 75.6 | 20.1 | 94.3 | 100 | 98.8 | 100 | 99.96 |
 | Health Net OR in-network | comparison | 72.7 | 52.2 | 8.5 | 89.1 | 100 | 99.95 | 100 | 100 |
 | Ambetter CA in-network | comparison | 94.6 | 86.1 | 98.5 | 93.0 | 99.99 | 93.4 | 100 | 100 |
 
@@ -68,8 +68,9 @@ Raw values behind the scores:
 ### What the grades say about the file we use (Health Net CA)
 - **Strong:** current (11 days old), all dollar rates, no $0 rates, valid IDs, few duplicates or conflicts.
 - **Weak:** **provider detail (20.1)**. About 80% of its NPIs are organizations, so individual clinicians are under-represented.
-  **Code coverage is partial (68.8% by weight, 23% by count)**, and every price on a HiLabs code is professional; the file is
-  99.7% facility prices on revenue codes outside the HiLabs list.
+  **Code coverage is partial (75.6% by weight, 34.8% by count)**. 99.7% of its prices are facility prices filed under
+  revenue codes; decoding the CPT/HCPCS code each carries adds 69 HiLabs codes (68.8% → 75.6%) that are priced only at
+  facility level.
 - **Compared with Ambetter CA** (same payer, same state, marketplace): Ambetter lists 20× more NPIs, almost all individuals,
   and prices 382 HiLabs codes. So the Health Net CA gaps are a property of that file, not of Centene's format.
 - **Implication for the rate file:** results are reliable for the providers and codes present, but the PPO network

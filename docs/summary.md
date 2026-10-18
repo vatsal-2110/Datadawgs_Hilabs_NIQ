@@ -8,21 +8,26 @@
 | Plan rows in index files | 3,275 |
 | Unique rate files (after removing 14 duplicate references) | 66 |
 | CA commercial group plans | 1,312 |
-| **PPO plans identified** | **453** (456 if the 3 EPO plans on the inferred PPO network are added) |
+| **PPO plans identified** | **453** (evidence: `data/stage2/c2_network_evidence.txt`) |
 | Plans ruled out (not PPO) | HMO 723, EOA_HYBRID 127, POS 6, EPO 3 |
 | **PPO rate files** | **1**: 2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json |
 | Providers in the PPO file | 3,734 NPIs, 2,888 TINs (3,780 pairs) |
-| Rates extracted (HiLabs codes) | 7,520 rows, 134 codes, 2,824 NPIs, 2,231 TINs |
-| Final rate file | 8,821 rows, 2,824 NPIs, 2,231 TINs, 2,944 addresses |
+| Rates extracted (HiLabs codes) | 8,820 rows, 203 codes, 2,995 NPIs, 2,356 TINs |
+| All in-network prices (every code type) | 264,439 rows, 1,276 codes, 3,734 NPIs (every provider in the file) |
+| HiLabs codes priced by component | {'facility': 120, 'professional': 134} (facility = decoded revenue-code prices) |
+| Out-of-network allowed amounts (separate table) | 1,970 payments, 336 codes; median OON allowed / in-network rate 24.3x over 158 shared codes |
+| Final rate file | 10,287 rows, 2,995 NPIs, 2,356 TINs, 3,035 addresses |
 | **NPIs linked to a VERIFIED address** | **44.8%** (verified or probable: 46.6%) |
 | **TINs linked to a VERIFIED address** | **41.1%** (verified or probable: 43.5%) |
 | NPPES-only baseline: NPPES primary independently confirmed | 43.2% (pipeline: 44.8%; 58 NPIs verified only at a non-NPPES-primary address; 190 pairs whose best address is not the NPPES primary) |
+| **Plan network use (C2, from plan design + Health Net plan documents)** | EPO_NETWORK: 3 (3 from evidence, 0 name only); HMO_NETWORK_ONLY: 723 (656 from evidence, 67 name only); PPO_NETWORK_PRIMARY: 453 (393 from evidence, 60 name only); PPO_NETWORK_TIER: 133 (124 from evidence, 9 name only) (`data/stage2/c2_plan_design.txt`) |
+| PPO-network evidence per provider pair (C2) | PPO_PRESUMED 3,399, PPO_CONFIRMED 210, HMO_SIGNAL 168, MIXED 3 (rules: `docs/logic_ppo_network.md` §4.1) |
 
 ## File quality scores (C3)
 
 | File | Role | Overall (0-100) |
 |---|---|---|
-| 2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json | USED (in scope) | 79.2 |
+| 2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json | USED (in scope) | 81.0 |
 | 2026-09-30_centene-management-company-llc_healthnet-or_in-network.json | comparison | 72.7 |
 | 2026-09-28_centene-management-company-llc_ambetter-ca_in-network.json | comparison | 94.6 |
 
@@ -32,4 +37,4 @@ NPPES_PRIMARY: 2,136, UNMAPPED: 843, CODE_PROFILE: 348, FACILITY_MAP: 289, NPPES
 
 ## Cost effectiveness (C7)
 
-INSUFFICIENT_DATA: 1,809, AVERAGE: 349, HIGH_COST: 115, COST_EFFECTIVE: 32
+AVERAGE: 1,408, HIGH_COST: 559, COST_EFFECTIVE: 459

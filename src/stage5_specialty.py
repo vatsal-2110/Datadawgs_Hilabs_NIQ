@@ -34,7 +34,8 @@ def main():
 
     nppes = pd.read_parquet(s5 / "nppes_npi.parquet")
     rates = pd.read_parquet(cfg["paths"]["stage4"] / "rates.parquet")
-    priced = rates.dropna(subset=["npi"]).groupby("npi").billing_code.agg(set).to_dict()
+    # professional codes only: a facility fee says what the building does, not the clinician's specialty
+    priced = rates[rates.component.eq("professional")].dropna(subset=["npi"]).groupby("npi").billing_code.agg(set).to_dict()
     spec_tot = sp.groupby("SPEC_CD").w.sum()
     ratio = cfg["specialty"]["code_profile_min_ratio"]
 

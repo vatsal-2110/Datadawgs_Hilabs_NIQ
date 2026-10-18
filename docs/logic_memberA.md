@@ -2,6 +2,10 @@
 
 Format for every decision: **Decision → Alternatives → Why → Limitation**. Evidence is quoted from the real files.
 
+> **Status (2026-10-18): this is the working log. The final C1 / C2 logic is `docs/logic_ppo_network.md`.** Entries marked
+> **UPDATED** below were superseded by stronger evidence added later (third-party scope tests, plan-design /
+> plan-document classification, provider-level PPO evidence). Nothing below was deleted, so the reasoning trail stays visible.
+
 ---
 
 ## C1 — Index parsing
@@ -176,6 +180,10 @@ R1 EOA → R2 POS → R3 EPO → R4 HMO → R5 PPO → R6 HMO family code (SAL/S
 - **Alternatives:** (A) a separate "ambiguous" label, reported both ways; (B) count as PPO; (C) count as EPO. A–C all force one axis onto a question that has two.
 - **Why:** the PS asks for both "the PPO network" (doctors) and "rule out EPO" (plan types). Two axes answer both without contradiction, and each axis is backed by a Health Net document.
 - **Limitation:** no plan document for these 3 exact plans. The reading rests on Health Net's general group-EPO definition plus the sibling plans. Since every CA plan shares one rate file, the choice changes plan counts only, not providers or rates.
+- **UPDATED (2026-10-18): the PPO-network inference is withdrawn.** A current California Department of Insurance filing
+  ("Network Waivers for Health Net SBG PureCare One EPO") shows Health Net's EPO runs on its **own PureCare One EPO
+  network**; it supersedes the 2009 handbook. The 3 plans are now `EPO_NETWORK` (not PPO, not on the PPO network) and the
+  "456 incl. EPO" figure is dropped. See `docs/logic_ppo_network.md` §3.3.
 
 ### D2.5 No network word → HMO by family code, confidence medium
 - "CA L SAL Mex 5/0/1500" (3 employers) and "CA L&T CUS SAL CEMENT MASONS CA H&W GF+": both are in the **SAL (Salud HMO y Más)** family, and every other SAL name says HMO.
@@ -193,6 +201,14 @@ R1 EOA → R2 POS → R3 EPO → R4 HMO → R5 PPO → R6 HMO family code (SAL/S
 
 **PPO plans: 453 (documented on the PPO network). If the 3 EPO plans are added on the inferred network: 456.** Ruled out as PPO plans: 723 HMO, 127 EOA, 6 POS, 3 EPO.
 
+**UPDATED (2026-10-18): this table is the *name-based* first pass. The final answer no longer depends on the name.**
+`src/stage2_plan_design_evidence.py` matches each plan's benefit design to Health Net's 2026 plan documents (208 large-group
+plan overviews + 242 SBCs: PPO documents = Certificate of Insurance + out-of-network benefits; HMO/EOA documents =
+Evidence of Coverage, no out-of-network benefits; no design is sold both ways). Final network use: **PPO_NETWORK_PRIMARY
+453 (393 proven by design / plan document, 60 name only)**, PPO_NETWORK_TIER 133 (EOA 127, POS 6), HMO_NETWORK_ONLY 723,
+EPO_NETWORK 3. Where evidence exists (1,167 plans) it never contradicts the name. Per-plan evidence:
+`data/stage2/ppo_network_decisions.csv`; logic: `docs/logic_ppo_network.md` §3.
+
 The 453 PPO rows include 34 metal-tier names ("Gold PPO 500/20", HIOS IDs 67138CA0xx) and 2 rows with placeholder ID 999999999 (labelled by name; the ID is not used).
 
 ## C2 Step C — Can providers inside the file be split into PPO vs not? (evidence)
@@ -207,9 +223,26 @@ The 453 PPO rows include 34 metal-tier names ("Gold PPO 500/20", HIOS IDs 67138C
 - **Size of the uncertainty:** HMO-style hints touch at most 19 (AMBETTER_HMO) + 14 (IPA) + 74 (capitation) = 107 of 3,780 pairs (2.8%). We report the rate-file counts with and without them.
 - **Alternatives:** (a) drop hinted providers (rejected: the hint labels' meaning is undocumented); (b) manual check in Health Net's online provider search for a sample of providers (recommended as validation if a team member has time; needs a person in a browser).
 - **Limitation:** the result is an upper bound on the PPO network. Some providers may be in-network only for HMO/EOA plans.
+- **UPDATED (2026-10-18): provider-level evidence added** (`src/stage2_provider_network.py`, `docs/logic_ppo_network.md` §4.1).
+  210 (NPI, TIN) pairs are PPO_CONFIRMED (practice county outside Health Net's 31-county HMO service area per the CA Office
+  of the Patient Advocate, or a PPO group label); 104 HMO_SIGNAL (capitation / IPA / Ambetter-HMO label); 3 MIXED;
+  3,463 PPO_PRESUMED, priced like the confirmed PPO providers (median per-code difference 0.000). Every rate-file row
+  carries `ppo_network_evidence`.
 
 ## C4 — Rate extraction
 Script `src/stage4_extract_rates.py` → `data/stage4/rates.parquet` (+ `.csv`) and `data/stage4/c4_report.txt`.
+
+> **UPDATED (2026-10-18), C4 v2: supersedes D4.3, D4.5 and D4.6 below** (full method: `docs/logic_ppo_network.md` §5).
+> (1) Every price of every code type is extracted → `rates_all.parquet` (3,734 of 3,734 NPIs); `rates.parquet` is the
+> HiLabs subset. (2) Facility prices are decoded: an RC item price whose `additional_information` names a CPT/HCPCS code
+> is the facility fee for that code (`revenue_code` kept), so HiLabs codes priced rise 134 → 203 (68.8% → 75.6% of weight),
+> professional and facility. (3) Service key = npi, tin, code type, code, item name (blank for decoded facility prices),
+> billing class, modifier, place of service, revenue code, arrangement. (4) Several contracts for one service → the
+> **primary contract's** price (the provider_reference pricing the most services), not the median: a median of two
+> contracts is a price nobody is paid. `rate_median_all`, min, max, `n_contracts` are kept. (5) Expiry judged against
+> the file's `last_updated_on`. (6) The out-of-network allowed-amounts file is parsed into `oon_allowed.parquet`
+> (never mixed into rates). It gives provider signal O and the in- vs out-of-network benchmark.
+> Result: 8,820 rows, 2,995 NPIs, 2,356 TINs, 203 codes.
 
 ### D4.3 Keep only the HiLabs billing codes
 - **Rule:** `billing_code` ∈ the 583 PROC_CD values of the "Spec-Proc Weights" sheet.
@@ -274,12 +307,14 @@ File `data/raw/Rate Benchmarking Individual Weights_Hackathon.xlsx` (config key 
 | 11 | EOA is an HMO-based hybrid | V | Health Net page (fetched today, verbatim): "Elect Open Access (EOA) is an HMO plan…"; flyer (5/20) |
 | 12 | Health Net large-employer page lists no EPO/POS | V | page text: 0 matches for EPO, POS, "Exclusive Provider", "Point of Service" |
 | 13 | EC = ExcelCare, CN = CanopyCare, SC = SmartCare, SAL = Salud | I | name co-occurrence + Health Net page + broker source. **No label depends on EC/CN/SC** (all those names carry HMO/EOA words). SAL decides 4 rows, backed by 163 other SAL rows all saying HMO |
-| 14 | 3 "PPO … EPO" plans: network = PPO network | I | a 2009 Health Net EPO handbook for another employer → stored as `PPO_NETWORK_INFERRED` |
+| 14 | 3 "PPO … EPO" plans: network = PPO network | **X** | 2009 handbook superseded by a current CA Dept. of Insurance filing: EPO = separate PureCare One EPO network → `EPO_NETWORK` (2026-10-18) |
 | 15 | SCUSD renewal lists HMO/EPO/PPO | **X** | cited from a search summary; direct download = HTTP 404 → removed |
-| 16 | Business-name labels ("PPO: <County>", "HEALTH NET DIRECT FFS COMMERCIAL", "DIRECT NETWORK: AMBETTER HMO/PPO", IPAs) mark network membership | I | They exist and repeat across many TINs (V). **What they mean is not documented.** Step C must treat them as label groups to compare, not as ground truth |
+| 16 | Business-name labels ("PPO: <County>", "HEALTH NET DIRECT FFS COMMERCIAL", "DIRECT NETWORK: AMBETTER HMO/PPO", IPAs) mark network membership | I | They exist and repeat across many TINs (V). **What they mean is not documented.** Used only as one of four provider-level signals (with geography, capitation, price signature), never alone (2026-10-18) |
+| 17 | CA scope proven by third-party data, not names | V | per structure: NPPES practice state of providers (CA 96.6%), DOL Form 5500 employer state (CA 76.3%), HIOS issuer = Health Net of California (CMS); Oregon structure 97.3% / 99.2% OR (`data/stage1/c1_scope_evidence.txt`, 2026-10-18) |
+| 18 | Plan PPO / not-PPO decided from plan design + Health Net 2026 plan documents | V | 450 documents read; 0 designs shared PPO vs HMO/EOA; 1,167 plans classified without the network word, 0 disagreements (`data/stage2/c2_plan_design.txt`, 2026-10-18) |
 
 ### Open question the PS still requires us to answer (C4: "For the PPO network, extract rates for every provider")
-Every CA plan, PPO or not, points to the same file. So **which providers in the file belong to the PPO network is not yet established**. The plan labels (C2 Layer 1) answer "which plans" and "which file". They do not answer "which providers". Step C (overlap of label groups) and an external check (e.g. Health Net's provider directory) are the routes to answer it. Until then, no provider is filtered out.
+Every CA plan, PPO or not, points to the same file. So **which providers in the file belong to the PPO network is not yet established**. **UPDATED (2026-10-18): answered with provider-level evidence, see the D2.7 update above and `docs/logic_ppo_network.md` §4.1.** The plan labels (C2 Layer 1) answer "which plans" and "which file". They do not answer "which providers". Step C (overlap of label groups) and an external check (e.g. Health Net's provider directory) are the routes to answer it. Until then, no provider is filtered out.
 
 ## Findings that reshape C2 (to design next)
 - **Only ONE CA in-network file, shared by every Health Net CA plan.** A naive keyword count on plan names (first of PPO/HMO/EPO/POS/EOA found) gives HMO 719, PPO 455, EOA 127, POS 6, none 5. **This is NOT the C2 answer.** It ignores mixed names (e.g. "…PPO … EPO$15"), the unknown meaning of EOA, unlabeled plans, and the fact that a plan *named* PPO does not prove which provider network it uses. It's only the starting point C2 must test. So PPO can't be identified by choosing files; it has to be done inside the file. The planned file-level voting and file-overlap heatmap can't separate networks for CA as designed.

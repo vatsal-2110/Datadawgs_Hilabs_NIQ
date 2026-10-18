@@ -25,17 +25,24 @@ SRC_EOA = "https://www.healthnet.com/content/dam/centene/healthnet/pdfs/broker/c
 SRC_CANOPY = "https://wordandbrown.com/NewsPost/Large-Group-Carrier-Spotlight-Health-Net"
 # Health Net Life Insurance Co. EPO member handbook for one employer (Northrop Grumman), PDF created 2009-05-15
 SRC_HN_EPO = "https://www.healthnet.com/static/custom/unprotected/pdfs/CA58857_Northrop_handbook.pdf"
+# California Department of Insurance: network-adequacy waiver filing for Health Net's PureCare One EPO network
+SRC_CDI_EPO = ("https://www.insurance.ca.gov/01-consumers/110-health/10-basics/upload/"
+               "Network-Waiver-Health-Net-SBG-PureCare-One-EPO-PF-2018-01437-2.pdf")
 
 # Two axes (D2.4): product_type = benefit rules; provider_network = which doctors the plan uses.
 # *_INFERRED = not documented for these exact plans; reasoning + source recorded in network_evidence.
 NETWORK_OF = {
     "PPO": ("PPO_NETWORK", "PPO plan uses the PPO network (Health Net plan-type page)"),
-    "EPO": ("PPO_NETWORK_INFERRED", "INFERRED: a 2009 Health Net EPO handbook (other employer) says the EPO "
-                                    "'gives you access to our full PPO network'; not documented for these plans"),
+    # Updated 2026-10-18 (Member B): the 2009 handbook inference is superseded by current regulator filings: Health
+    # Net's EPO runs on its own PureCare One EPO network (CA Dept. of Insurance network-waiver filing, config
+    # evidence.product_types.EPO). So an EPO plan is NOT evidence of PPO-network use.
+    "EPO": ("EPO_NETWORK", "Health Net EPO = Health Net Life on the PureCare One EPO network, a separate network "
+                           "(CA Dept. of Insurance network-waiver filing); not the PPO network"),
     "HMO": ("HMO_NETWORK", "HMO plan uses an HMO network (Full Network or tailored: SmartCare/ExcelCare/Salud/CanopyCare)"),
     "EOA_HYBRID": ("HMO_NETWORK+PPO_SPECIALISTS", "EOA: HMO network via PCP/physician group; PPO-network "
                                                   "specialists for exams/evaluations only"),
-    "POS": ("UNCONFIRMED", "POS network not documented publicly for these custom plans"),
+    "POS": ("HMO_NETWORK+OUT_OF_NETWORK", "POS plans are offered by Health Net of California, Inc. (DMHC), the HMO "
+                                          "licensee (Health Net claim form FRM049776EC01); HMO tier + out-of-network tier"),
     "UNKNOWN": ("UNCONFIRMED", ""),
 }
 
@@ -102,9 +109,9 @@ def classify(name: str) -> dict:
             conf = "medium"
             ev = ("name has both PPO and EPO. product_type = EPO because the name states EPO explicitly and the same "
                   "plan_id also files separate plain PPO/HMO/EOA/POS plans (index data, e.g. Sacramento City USD "
-                  "946002491: CUS HMO, CUS PPO, CUS PPO - EPO). Network = PPO network is INFERRED from a 2009 "
-                  "Health Net EPO handbook; no plan document found for these plans")
-            src = SRC_HN_EPO
+                  "946002491: CUS HMO, CUS PPO, CUS PPO - EPO). Health Net's EPO product runs on the separate "
+                  "PureCare One EPO network (CA Dept. of Insurance filing), so the 'PPO' word is not counted")
+            src = SRC_CDI_EPO
         return res("EPO", conf, "R3_EPO", ev, src)
     if "HMO" in hits:
         return res("HMO", "high", "R4_HMO", "name has HMO")

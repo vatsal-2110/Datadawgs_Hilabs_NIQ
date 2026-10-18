@@ -1,7 +1,7 @@
 # Run from the project root with the venv active. On Windows without `make`, run the commands directly.
 PY ?= python
 
-.PHONY: install stage1 stage1-sample profile pairs labels rates verify test grade fetch address c5audit specialty ratefile cost summary all ui
+.PHONY: install stage1 stage1-sample profile pairs labels rates verify test grade fetch address c5audit scope-evidence plan-design network-evidence medicare c1c2excel specialty ratefile cost summary all ui
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -44,6 +44,22 @@ c5audit:           ## C5: evidence behind the tier rules + NPPES-only baseline v
 
 specialty:         ## specialty per NPI
 	$(PY) -m src.stage5_specialty
+
+scope-evidence:    ## C1: third-party proof of the CA commercial group scope
+	$(PY) -m src.stage1_scope_evidence
+
+plan-design:       ## C2: plan benefit design matched to Health Net 2026 plan documents
+	$(PY) -m src.stage2_plan_design_evidence
+
+medicare:          ## C4: every rate vs Medicare 2026 (own CA locality) + robust outlier flags
+	$(PY) -m src.stage4_medicare_benchmark
+
+network-evidence:  ## C2: plan labels vs HIOS products, DOL Schedule A, legal entity; provider-level PPO evidence
+	$(PY) -m src.stage2_network_evidence
+	$(PY) -m src.stage2_provider_network
+
+c1c2excel:         ## C1 and C2 Excel deliverables
+	$(PY) -m src.export_c1_c2_excel
 
 ratefile:          ## C6: final Excel rate file
 	$(PY) -m src.stage6_build_rate_file

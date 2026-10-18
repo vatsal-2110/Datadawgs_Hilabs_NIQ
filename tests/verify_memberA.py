@@ -69,8 +69,9 @@ def main():
     check("Labels: no EOA/HMO/POS/EPO name labelled PPO",
           not labels[labels.is_ppo & (has["EOA"] | has["HMO"] | has["POS"] | has["EPO"])].shape[0])
     check("Labels: no UNKNOWN", (labels.product_type != "UNKNOWN").all())
-    check("Labels: EPO network marked inferred",
-          (labels[labels.product_type == "EPO"].provider_network == "PPO_NETWORK_INFERRED").all())
+    check("Labels: EPO plans are on the EPO network, not counted as PPO network",
+          (labels[labels.product_type == "EPO"].provider_network == "EPO_NETWORK").all()
+          and not labels[labels.product_type == "EPO"].uses_ppo_network_incl_inferred.any())
 
     # ---------------- rate file: independent read with json.load (loads 700 MB; slow but different code path)
     rf = cfg["paths"]["raw_rates"] / ins[ins.file_role == "in_network"].file_name.iloc[0]
@@ -90,47 +91,89 @@ def main():
     check("Pairs: NPI 10-digit / TIN 9-digit", pairs.npi.dropna().str.fullmatch(r"\d{10}").all()
           and pairs.tin.str.fullmatch(r"\d{9}").all())
 
-    # ---------------- C4 rates: full independent recompute with pandas
+    # ---------------- C4 rates: full independent recompute with pandas (decode -> per contract -> primary contract)
     hl = pd.read_excel(P["hilabs_xlsx"], sheet_name="Spec-Proc Weights", dtype=str)
     codes = set(hl.PROC_CD)
-    long = []
+    asof = doc.get("last_updated_on", "")
+    long, breadth = [], {}
     for it in doc["in_network"]:
-        if str(it["billing_code"]) not in codes:
-            continue
+        ct, c0 = it["billing_code_type"], str(it["billing_code"])
         for b in it["negotiated_rates"]:
             for p in b["negotiated_prices"]:
-                if p.get("negotiated_type") not in ("negotiated", "fee schedule", "derived") or p["negotiated_rate"] <= 0:
+                if p.get("negotiated_type") not in ("negotiated", "fee schedule", "derived") or p["negotiated_rate"] <= 0                         or (p.get("expiration_date") or "9999") < asof:
                     continue
+                a = (p.get("additional_information") or "").strip().upper()
+                if ct == "RC" and re.fullmatch(r"\d{4}[0-9A-Z]|[A-Z]\d{4}", a):
+                    code, name, rc = a, "", c0
+                else:
+                    code, name, rc = c0, it.get("name"), (c0 if ct == "RC" else "")
+                svc = (code, name, p.get("billing_class"), "|".join(sorted(p.get("billing_code_modifier") or [])),
+                       "|".join(sorted(p.get("service_code") or [])), rc, it.get("negotiation_arrangement") or "")
                 for ref in b["provider_references"]:
-                    long.append((ref, it["billing_code_type"], str(it["billing_code"]), it.get("name"),
-                                 p.get("billing_class"), "|".join(sorted(p.get("billing_code_modifier") or [])),
-                                 "|".join(sorted(p.get("service_code") or [])), p.get("additional_information"),
-                                 float(p["negotiated_rate"])))
+                    breadth.setdefault(ref, set()).add(svc)
+                    if code in codes:
+                        long.append((ref,) + svc + (float(p["negotiated_rate"]),))
     del doc
-    L = pd.DataFrame(long, columns=["ref", "billing_code_type", "billing_code", "item_name", "billing_class",
-                                    "modifier", "service_code", "additional_information", "r"])
-    L = L.merge(refdf, on="ref")
-    keys = ["npi", "tin", "billing_code_type", "billing_code", "item_name", "billing_class", "modifier",
-            "service_code", "additional_information"]
-    g = L.fillna({"npi": "", "additional_information": ""}).groupby(keys).r.agg(["median", "min", "max", "size"]).reset_index()
-    R = rates.fillna({"npi": "", "additional_information": ""})
-    m = g.merge(R, on=keys, how="outer", indicator=True)
-    check("Rates: same keys as independent recompute", (m._merge == "both").all(),
+    keys = ["billing_code", "item_name", "billing_class", "modifier", "service_code", "revenue_code",
+            "negotiation_arrangement"]
+    L = pd.DataFrame(long, columns=["ref"] + keys + ["r"])
+    C = L.groupby(["ref"] + keys).r.median().rename("cr").reset_index()
+    C["br"] = C.ref.map(lambda x: len(breadth[x]))
+    C = C.merge(refdf.drop_duplicates(), on="ref").fillna({"npi": ""})
+    k2 = ["npi", "tin"] + keys
+    C["top"] = C.br.eq(C.groupby(k2).br.transform("max"))
+    g = C.groupby(k2).agg(med_all=("cr", "median"), n_c=("ref", "nunique")).reset_index()         .merge(C[C.top].groupby(k2).cr.median().rename("prim").reset_index(), on=k2)
+    R = rates.fillna({"npi": ""})
+    R["item_name"] = R.item_name.where(~(R.billing_code_type.ne("RC") & R.revenue_code.ne("")), "")
+    m = g.merge(R, on=k2, how="outer", indicator=True)
+    check("Rates: same keys as independent recompute (decoded facility codes included)", (m._merge == "both").all(),
           f"recompute {len(g)} / parquet {len(R)} / only-one-side {int((m._merge != 'both').sum())}")
     both = m[m._merge == "both"]
-    check("Rates: median/min/max/n identical to recompute",
-          ((both["median"] - both.rate).abs() < 1e-9).all() and ((both["min"] - both.rate_min).abs() < 1e-9).all()
-          and ((both["max"] - both.rate_max).abs() < 1e-9).all() and (both["size"] == both.n_rates).all())
+    check("Rates: primary-contract rate, all-contract median and n_contracts identical to recompute",
+          ((both.prim - both.rate).abs() < 1e-9).all() and ((both.med_all - both.rate_median_all).abs() < 1e-9).all()
+          and (both.n_c == both.n_contracts).all())
+    check("Rates: facility rows are decoded RC items (revenue_code kept)",
+          rates[rates.component.eq("facility") & rates.billing_code_type.ne("RC")].revenue_code.ne("").all(),
+          f"{int(rates.component.eq('facility').sum())} facility rows, {rates[rates.component.eq('facility')].billing_code.nunique()} codes")
+    allr = pd.read_parquet(s4 / "rates_all.parquet", columns=["npi", "billing_code", "is_hilabs_code"])
+    check("Rates: every provider in the file has at least one price (rates_all)",
+          set(pairs.npi.dropna()) <= set(allr.npi.dropna()), f"{allr.npi.nunique()} NPIs")
+    check("Rates: rates.parquet = HiLabs subset of rates_all", int(allr.is_hilabs_code.sum()) == len(rates))
+    o = pd.read_parquet(s4 / "oon_allowed.parquet")
+    raw_o = json.load(open(P["raw_rates"] / files[files.in_scope & files.file_role.eq("allowed_amount")].file_name.iloc[0],
+                           encoding="utf-8"))
+    n_o = sum(len(pr.get("npi") or []) for it in raw_o["out_of_network"] for a in it["allowed_amounts"]
+              for pay in a["payments"] for pr in pay["providers"])
+    check("OON: allowed-amount rows = NPI entries in the raw file, kept apart from in-network rates",
+          len(o) == n_o and "allowed_amount" not in rates.columns, f"{n_o} rows")
     check("Rates: all codes in HiLabs list", rates.billing_code.isin(codes).all(),
           f"{rates.billing_code.nunique()} codes")
     check("Rates: rate > 0 and min <= rate <= max", (rates.rate > 0).all()
-          and ((rates.rate_min <= rates.rate) & (rates.rate <= rates.rate_max)).all())
+          and ((rates.rate_min <= rates.rate + 1e-9) & (rates.rate <= rates.rate_max + 1e-9)).all())
     check("Rates: every (npi,tin) exists in tin_npi_pairs",
           set(map(tuple, rates[["npi", "tin"]].fillna("").drop_duplicates().values))
           <= set(map(tuple, pairs[["npi", "tin"]].fillna("").values)))
     check("Rates: hilabs_spec_cds filled for every row", rates.hilabs_spec_cds.notna().all())
     hmo = rates.network_hint.str.contains("AMBETTER_HMO|IPA") | rates.in_capitation_code
     check("Rates: D2.7 hinted rows counted", True, f"{int(hmo.sum())} hinted / {len(rates)} rows")
+
+    # ---------------- C4 Medicare benchmark: hand recompute of 99213 (non-facility) in Los Angeles from the raw CMS zip
+    import csv as _csv, io as _io, zipfile as _zf
+    z = _zf.ZipFile(P["cms_pfs"] / "rvu26d.zip")
+    rv = list(_csv.reader(_io.StringIO(z.read(next(n for n in z.namelist() if "nonQPP" in n and n.endswith(".csv"))).decode("latin-1"))))
+    line = next(x for x in rv if x and x[0] == "99213" and x[1] == "")
+    gp = list(_csv.reader(_io.StringIO(z.read("GPCI2026.csv").decode("latin-1"))))
+    la = next(x for x in gp if len(x) > 6 and x[1] == "CA" and x[2] == "18")
+    hand = round((float(line[5]) * float(la[4]) + float(line[6]) * float(la[5]) + float(line[10]) * float(la[6])) * float(line[25]), 2)
+    rm = pd.read_parquet(s4 / "rates.parquet")
+    pick = rm[(rm.billing_code == "99213") & rm.modifier.eq("") & rm.medicare_locality.str.startswith("LOS ANGELES")
+              & rm.service_code.str.contains("11")]
+    check("C4 benchmark: Medicare 99213 LA = hand calculation from the CMS file", len(pick) > 0
+          and (pick.medicare_rate - hand).abs().max() < 0.011, f"hand ${hand}, {len(pick)} rows")
+    ok = rm.medicare_rate.notna()
+    check("C4 benchmark: pct_of_medicare = rate / medicare_rate x 100; rate_check filled",
+          ((rm.pct_of_medicare[ok] - 100 * rm.rate[ok] / rm.medicare_rate[ok]).abs() < 0.06).all() and rm.rate_check.notna().all(),
+          f"{int(ok.sum()):,} benchmarked rows")
 
     # ---------------- C3 grades
     sc = pd.read_parquet(P["stage3"] / "file_scores.parquet")
@@ -164,6 +207,30 @@ def main():
 
     # ---------------- C6 rate file
     rf = pd.read_parquet(P["stage6"] / "provider_rate_file.parquet")
+    pred = pd.read_parquet(P["stage2"] / "plan_network_prediction.parquet")
+    cat = pd.read_parquet(P["stage2"] / "plan_design_catalog.parquet")
+    lg = cat[(cat.market == "large") & cat.design_key.notna()]
+    check("C2 design: no benefit design is offered both as PPO and as HMO/EOA in Health Net's 2026 catalog",
+          not lg.groupby("design_key").family.agg(lambda s: "PPO" in set(s) and len(set(s)) > 1).any())
+    check("C2 design: every PPO document has an out-of-network column, no HMO/EOA document does",
+          lg[lg.family == "PPO"].has_out_of_network.all() and not lg[lg.family != "PPO"].has_out_of_network.any())
+    check("C2 design: evidence-based predictions never contradict the plan name",
+          pred[pred.evidence_based].agrees_with_name.all(), f"{int(pred.evidence_based.sum())} plans with evidence")
+    check("C2 design: every in-scope plan has a final network use",
+          len(pred) == len(labels) and pred.final_network_use.notna().all())
+    check("C2 design: PPO_NETWORK_PRIMARY set == is_ppo set",
+          set(pred[pred.final_network_use == "PPO_NETWORK_PRIMARY"].plan_row_id) == set(labels[labels.is_ppo].plan_row_id))
+    pe = pd.read_parquet(P["stage2"] / "provider_network_evidence.parquet")
+    hmo_cty = set(cfg["evidence"]["hmo_service_area"]["counties"])
+    conf_geo = pe[pe.g_non_hmo_county]
+    check("C2 providers: geography-confirmed pairs never sit only in HMO-service-area counties",
+          all(any(c not in hmo_cty for c in s.split(" | ")) for s in conf_geo.g_counties.fillna("")))
+    check("C2 providers: every pair classified once",
+          len(pe) == len(pairs) and pe.ppo_network_evidence.isin(["PPO_CONFIRMED", "HMO_SIGNAL", "MIXED", "PPO_PRESUMED"]).all())
+    check("C2 providers: PPO_CONFIRMED has no HMO evidence; HMO_SIGNAL has no PPO evidence",
+          not (pe[pe.ppo_network_evidence == "PPO_CONFIRMED"][["c_capitation", "h_hmo_label"]].any(axis=1)).any()
+          and not (pe[pe.ppo_network_evidence == "HMO_SIGNAL"][["g_non_hmo_county", "l_ppo_label"]].any(axis=1)).any())
+
     check("C6: required columns first", list(rf.columns[:6]) == ["NPI", "TIN", "Address", "Billing Code", "Specialty", "Rate"])
     check("C6: unique NPI x TIN x Address x Billing Code",
           not rf.fillna({"NPI": "", "Address": ""}).duplicated(["NPI", "TIN", "Address", "Billing Code"]).any(), f"{len(rf):,} rows")
@@ -172,7 +239,11 @@ def main():
           set(map(tuple, rates[k].fillna("").drop_duplicates().values))
           == set(map(tuple, rf[["NPI", "TIN", "Billing Code"]].fillna("").drop_duplicates().values)))
     r2 = rates.assign(_n=rates.npi.fillna(""))
-    r2["pref"] = (r2.modifier != "").astype(int) * 4 + (~r2.service_code.str.split("|").map(lambda s: "11" in s)).astype(int) * 2
+    own = r2.groupby(["_n", "tin"]).component.agg(lambda s: s.value_counts().idxmax()).rename("own").reset_index()
+    r2 = r2.merge(own, on=["_n", "tin"])
+    r2["pref"] = (r2.negotiation_arrangement.eq("capitation").astype(int) * 16 + r2.component.ne(r2.own).astype(int) * 8
+                  + (r2.modifier != "").astype(int) * 4
+                  + (~r2.service_code.str.split("|").map(lambda s: "11" in s)).astype(int) * 2)
     modal = r2.groupby(["_n", "tin", "billing_code", "service_code"]).size().rename("c").reset_index() \
         .sort_values("c", ascending=False).drop_duplicates(["_n", "tin", "billing_code"])
     r2 = r2.merge(modal[["_n", "tin", "billing_code", "service_code"]].assign(m=1), how="left",
@@ -193,7 +264,7 @@ def main():
     lab = pd.Series("AVERAGE", index=ce.index)
     lab[(ce.weighted_cost_index <= 0.90) & (ce.pct_codes_below_median >= 0.60)] = "COST_EFFECTIVE"
     lab[(ce.weighted_cost_index >= 1.10) & (ce.pct_codes_below_median <= 0.40)] = "HIGH_COST"
-    lab[ce.n_codes_compared < 3] = "INSUFFICIENT_DATA"
+    lab[ce.n_codes_compared < 1] = "INSUFFICIENT_DATA"
     check("C7: labels follow the stated thresholds", (lab == ce.label).all(), f"{len(ce):,} providers")
 
     # ---------------- summary matches outputs

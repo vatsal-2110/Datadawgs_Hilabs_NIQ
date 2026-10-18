@@ -6,7 +6,7 @@ Graded files: every in-scope in-network file (the file we USE) plus comparison f
 Each file is streamed with ijson (never loaded whole); files are graded in PARALLEL (one process each).
 
 Metrics (each is a percentage 0-100; formulas and reasons in docs/file_quality_metrics.md):
-  M1 code_coverage     HiLabs code weight priced / total HiLabs weight                       (weight 25)
+  M1 code_coverage     HiLabs code weight priced (incl. facility prices decoded from RC items) / total weight (25)
   M2 provider_detail   share of NPIs that are individuals (Type 1), NPPES sample              (weight 15)
   M3 rate_validity     100 - %prices <= 0 - %robust outliers (|modified z| > 3.5 in-service)  (weight 15)
   M4 usable_rate_types % prices in dollars (negotiated / fee schedule / derived)              (weight 10)
@@ -127,6 +127,10 @@ def grade_one(args):
                         n_dollar += 1
                         if rate and rate > 0:
                             priced_codes.add(code)
+                            # facility price filed under a revenue code but naming its CPT/HCPCS code (C4 decoding)
+                            a = (p.get("additional_information") or "").strip().upper()
+                            if it.get("billing_code_type") == "RC" and re.fullmatch(r"\d{4}[0-9A-Z]|[A-Z]\d{4}", a):
+                                priced_codes.add(a)
                     svc = (it.get("billing_code_type"), code, name, bc,
                            "|".join(sorted(p.get("service_code") or [])),
                            "|".join(sorted(p.get("billing_code_modifier") or [])), p.get("additional_information"), nt)
