@@ -4,13 +4,13 @@ Finds Centene's **PPO network** (commercial group, California) in its Transparen
 files, maps every provider to **practicing addresses** with evidence tiers, and produces a provider rate file at
 **NPI × TIN × address × billing code** level.
 
-| PS deliverable | File in `deliverables/` (numbered as in the PS; refreshed at the end of every run; index: `deliverables/0_README.md`) |
+| PS deliverable | File in `deliverables/` (numbered as in the PS; index: `deliverables/0_README.md`) |
 |---|---|
 | 1. Rate file (Excel) | `1_rate_file.xlsx` (+ `1_rate_file.csv`): one row per NPI × TIN × Address × Billing Code, with NPI, TIN, Address, Billing Code, Specialty, Rate first |
 | 2. Logic file | `2a_logic_PPO_network_C1_C2_C4.md` (a: PPO network) · `2b_logic_TIN_NPI_address_C5.md` (b: TIN → NPI → address) · `2c_logic_rate_file_and_cost_effectiveness_C6_C7.md` · `2d_decision_log_C1_C2_C4.md` · evidence workbooks `2e_C1_index_plans_and_files.xlsx`, `2f_C2_PPO_network.xlsx` (sources in `docs/`) |
 | 3. File quality metrics | `3_file_quality_metrics_C3.md` + `3_file_quality_scores_*.csv` |
 | 4. Summary file | `4_summary.md` (+ `4_summary.json`), generated from the run |
-| 5. Video | recorded separately (max 5 minutes) |
+| 5. Video | uploaded on drive |
 | 6. Code repo | this repository: re-runs from this README with one command; no hardcoded paths (all paths and URLs in `config.yaml`) |
 | 7. Brownie points | (a) UI with executive and analyst views: `app/streamlit_app.py` · (b) cost effectiveness: `7b_cost_effectiveness_C7.xlsx` |
 
