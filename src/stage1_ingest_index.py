@@ -26,7 +26,7 @@ import ijson
 import pandas as pd
 import requests
 
-from src.common.normalize import ROOT, file_name_from_url, load_config, norm_url
+from src.common.normalize import ROOT, file_name_from_url, load_config, norm_url, save_csv
 
 HEADER_KEYS = {"reporting_entity_name", "reporting_entity_type", "last_updated_on", "version"}
 
@@ -400,7 +400,7 @@ def main(argv=None):
     pfm.to_parquet(out / "plan_file_map.parquet", index=False)
     idx.to_parquet(out / "index_files.parquet", index=False)
     table.to_parquet(out / "c1_plan_file_table.parquet", index=False)
-    table.to_csv(out / "c1_plan_file_table.csv", index=False, encoding="utf-8")
+    save_csv(table, out / "c1_plan_file_table.csv")
     n_refs = links[["structure_id", "url"]].drop_duplicates().shape[0]  # file references, one per structure
     text = write_report(out / "c1_report.txt", idx, plans, files, table, n_refs, cfg["scope"]["state"].upper())
     print(text)

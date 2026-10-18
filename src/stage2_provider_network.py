@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 EMERGENCY_CODES = {"99281", "99282", "99283", "99284", "99285", "99291", "99292"}
 
@@ -116,7 +116,7 @@ def main():
                                              out.c_capitation, out.h_hmo_label, out.o_oon_paid, out.o_oon_codes.fillna(""))]
     out = out.drop(columns="_npi")
     out.to_parquet(P["stage2"] / "provider_network_evidence.parquet", index=False)
-    out.to_csv(P["stage2"] / "provider_network_evidence.csv", index=False, encoding="utf-8")
+    save_csv(out, P["stage2"] / "provider_network_evidence.csv")
 
     # P: price signature. Same code + place of service, standard service (no modifier), groups of >= 10 providers:
     # each provider's rate / the code's median. If PPO_PRESUMED providers are on the PPO fee schedule, their per-code

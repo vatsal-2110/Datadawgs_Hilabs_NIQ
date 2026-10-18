@@ -132,6 +132,18 @@ item_name, billing_class, modifier, service_code, revenue_code, negotiation_arra
 | peer_robust_z | float | 0.6745 × (log rate − median) / MAD among rows with the same code, component, modifier (groups ≥ 5) |
 | rate_check | str | OK or HIGH_VS_PEERS / LOW_VS_PEERS / ABOVE_10X_MEDICARE / BELOW_30PCT_MEDICARE (kept, not dropped) |
 
+| contract_multiplier_pct / fits_contract_formula | float / bool | (added by `src.stage4_contract_terms`) provider's recovered formula, X% of Medicare (EXACT/LIKELY only), and whether this rate fits it (±1%) |
+
+### `data/stage4/provider_contract_terms.parquet` (+ `.csv`)
+One row per (npi, tin) with ≥ 1 benchmarked professional rate: n_codes, multiplier_pct, n_codes_on_multiplier,
+formula_class (EXACT / LIKELY / SINGLE / NONE), tin_* (the same fit over the whole TIN), formula_source (own / TIN),
+used_multiplier_pct, used_formula_class, whole_number_pct, medicare_locality, spec_cd, specialty, estimates_ship.
+
+### `data/stage4/estimated_rates.parquet` (+ `.csv`): NOT real rates
+npi, tin, billing_code, spec_cd, specialty, medicare_locality, medicare_rate_nonfacility, multiplier_pct,
+estimated_rate (= multiplier × Medicare), formula_class, formula_source, validated_within_5pct (hide-and-check accuracy
+of that formula group), confidence (HIGH own EXACT / MEDIUM TIN EXACT), is_estimate = True.
+
 ### `data/stage4/oon_allowed.parquet` (+ `.csv`), `oon_vs_in_network.parquet`
 Out-of-network allowed amounts from the PPO plans' allowed-amounts file: one row per (billing_code, tin, npi, payment):
 billing_code_type, billing_code, item_name, tin, npi, service_code, billing_class, allowed_amount, billed_charge, file_key.

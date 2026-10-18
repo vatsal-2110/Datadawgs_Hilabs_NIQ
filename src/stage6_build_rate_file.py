@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 
 def headline(rates: pd.DataFrame) -> pd.DataFrame:
@@ -52,7 +52,11 @@ def headline(rates: pd.DataFrame) -> pd.DataFrame:
                                  network_hint=("network_hint", lambda s: "|".join(sorted({x for v in s for x in v.split("|") if x}))),
                                  in_capitation_code=("cap", "all"),
                                  medicare_rate=("medicare_rate", "median"), medicare_source=("medicare_source", "first"),
-                                 rate_check=("rate_check", lambda s: "; ".join(sorted({x for v in s for x in v.split("; ")} - {"OK"})) or "OK")
+                                 rate_check=("rate_check", lambda s: "; ".join(sorted({x for v in s for x in v.split("; ")} - {"OK"})) or "OK"),
+                                 contracts_agree=("n_distinct_rates", lambda s: bool((s <= 1).all())),
+                                 contract_multiplier_pct=("contract_multiplier_pct", "first"),
+                                 fits_contract_formula=("fits_contract_formula",
+                                                        lambda s: None if s.isna().all() else bool(s.dropna().all()))
                                  ).reset_index()
     agg["pct_of_medicare"] = (100 * agg.rate / agg.medicare_rate).round(1)
     var = r.groupby(kk).agg(n_rate_variants=("rate", "size"), variant_rate_min=("rate", "min"),
@@ -100,20 +104,32 @@ def main():
                                                 on=["_k", "tin"], how="left").drop(columns="_k")
     else:
         f["ppo_network_evidence"], f["ppo_evidence_detail"] = None, None
+    # trust score (0-100): how far to trust this row's rate, from five independent checks (logic D6.4)
+    pts = {"check": f.rate_check.eq("OK") * 30,
+           "contracts": f.contracts_agree.map({True: 15, False: 5}).fillna(5),
+           "formula": f.fits_contract_formula.map({True: 20, False: 0}).fillna(10),
+           "ppo": f.ppo_network_evidence.map({"PPO_CONFIRMED": 20, "PPO_PRESUMED": 12, "MIXED": 8, "HMO_SIGNAL": 0}).fillna(8),
+           "address": f.tier.map({"VERIFIED": 15, "PROBABLE": 10, "UNVERIFIED": 4, "NONE": 0}).fillna(0)}
+    f["trust_score"] = sum(pts.values()).astype(int)
+    f["trust_band"] = pd.cut(f.trust_score, [-1, 59, 79, 100], labels=["LOW", "MEDIUM", "HIGH"]).astype(str)
+    f["trust_detail"] = [
+        f"rate check {a}/30, contracts agree {b}/15, fits contract formula {c}/20, PPO evidence {d}/20, address {e}/15"
+        for a, b, c, d, e in zip(*(pts[k].astype(int) for k in ("check", "contracts", "formula", "ppo", "address")))]
     out = f.rename(columns={"npi": "NPI", "tin": "TIN", "address": "Address", "billing_code": "Billing Code",
                             "specialty": "Specialty", "rate": "Rate"})
-    cols = ["NPI", "TIN", "Address", "Billing Code", "Specialty", "Rate",
+    cols = ["NPI", "TIN", "Address", "Billing Code", "Specialty", "Rate", "trust_score", "trust_band",
             "provider_name", "npi_type", "item_name", "billing_code_type", "rate_component", "revenue_code",
             "place_of_service", "modifier", "rate_source", "n_contracts",
             "n_rate_variants", "variant_rate_min", "variant_rate_max", "tier", "city", "state", "zip", "county_fips5",
             "lat", "lon", "spec_cd", "specialty_source", "code_in_specialty_list", "network_hint", "in_capitation_code",
             "ppo_network_evidence", "ppo_evidence_detail", "medicare_rate", "pct_of_medicare", "medicare_source",
-            "rate_check", "sources", "evidence"]
+            "rate_check", "contract_multiplier_pct", "fits_contract_formula", "contracts_agree", "trust_detail",
+            "sources", "evidence"]
     out = out[cols].rename(columns={"tier": "address_tier"}).sort_values(["NPI", "TIN", "Billing Code", "Address"])
     key = ["NPI", "TIN", "Address", "Billing Code"]
     assert not out.fillna({"NPI": "", "Address": ""}).duplicated(key).any(), "duplicate NPI x TIN x Address x Code"
     out.to_parquet(s6 / "provider_rate_file.parquet", index=False)
-    out.to_csv(s6 / "provider_rate_file.csv", index=False, encoding="utf-8")
+    save_csv(out, s6 / "provider_rate_file.csv")
 
     readme = pd.DataFrame([
         ("Rate File", "One row per NPI x TIN x Address x Billing Code. Required columns first: NPI, TIN, Address, "
@@ -134,6 +150,17 @@ def main():
         ("rate_check", "OK, or HIGH_VS_PEERS / LOW_VS_PEERS (robust median/MAD z-score > 3.5 among rates for the same "
                        "code, component and modifier), ABOVE_10X_MEDICARE / BELOW_30PCT_MEDICARE (professional only). "
                        "Flagged rates are real file values and are kept; filter them out for benchmarking."),
+        ("trust_score", "0-100, how far to trust the row's rate: rate_check OK (30) + all contracts agree (15) + fits the "
+                        "provider's recovered contract formula, X% of Medicare (20; 10 if no formula) + PPO-network "
+                        "evidence (CONFIRMED 20, PRESUMED 12, MIXED 8, HMO_SIGNAL 0) + address tier (VERIFIED 15, "
+                        "PROBABLE 10, UNVERIFIED 4). trust_band HIGH >= 80, MEDIUM 60-79, LOW < 60; trust_detail "
+                        "shows the points."),
+        ("contract_multiplier_pct", "The provider's contract recovered from its rates: 'pays X% of Medicare' (EXACT or "
+                                    "LIKELY formulas only; src.stage4_contract_terms)."),
+        ("Estimated Rates", "Separate sheet, NOT real file rates: HiLabs codes of the provider's specialty that the file "
+                            "does not price for it, estimated as contract multiplier x Medicare. Only for EXACT formulas, "
+                            "which passed a hide-and-check test (88.6% / 96.6% within 5% of the true rate vs 28.6% for "
+                            "a code-median guess)."),
         ("rate_source", "single contract, or 'primary of N contracts' when N provider_references priced the service; "
                         "all of them stay in Rate Variants (rate_median_all, rate_min, rate_max)."),
         ("Rate Variants", "Every rate row from C4 (modifiers such as 95 telehealth / 26 professional component, "
@@ -152,11 +179,21 @@ def main():
                                  "(logic §4.1). Filter to PPO_CONFIRMED for a strictly proven PPO-network view."),
         ("Logic", "docs/logic_ppo_network.md, docs/logic_address_mapping.md; metrics: docs/file_quality_metrics.md"),
     ], columns=["Item", "Meaning"])
-    with pd.ExcelWriter(s6 / "provider_rate_file.xlsx", engine="openpyxl") as xw:
+    ep = s4 / "estimated_rates.parquet"
+    est = pd.read_parquet(ep) if ep.exists() else pd.DataFrame()
+    xp = s6 / "provider_rate_file.xlsx"
+    try:
+        if xp.exists():
+            open(xp, "r+b").close()          # Excel locks an open workbook on Windows
+    except PermissionError:
+        print(f"WARNING: {xp} is open in Excel; close it and re-run (parquet and CSV are written)")
+        return
+    with pd.ExcelWriter(xp, engine="openpyxl") as xw:
         out.to_excel(xw, sheet_name="Rate File", index=False)
         rates.to_excel(xw, sheet_name="Rate Variants", index=False)
+        est.to_excel(xw, sheet_name="Estimated Rates", index=False)
         readme.to_excel(xw, sheet_name="Read Me", index=False)
-        for name, df in (("Rate File", out), ("Rate Variants", rates)):
+        for name, df in (("Rate File", out), ("Rate Variants", rates), ("Estimated Rates", est)):
             ws = xw.sheets[name]
             ws.freeze_panes = "A2"
             ws.auto_filter.ref = ws.dimensions

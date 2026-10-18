@@ -64,6 +64,12 @@ def main():
                                          "median_oon_allowed_to_in_network": float(b.oon_to_in_network_ratio.median())})(
             pd.read_parquet(P["stage4"] / "oon_allowed.parquet"), pd.read_parquet(P["stage4"] / "oon_vs_in_network.parquet"))
             if (P["stage4"] / "oon_allowed.parquet").exists() else None,
+        "contract_terms": (lambda c, e: {"providers": int(len(c)), "own_formula": c.formula_class.value_counts().to_dict(),
+                                          "inherited_from_tin": int(c.formula_source.eq("TIN").sum()),
+                                          "estimated_rates": int(len(e)), "estimated_providers": int(e.npi.nunique())})(
+            pd.read_parquet(P["stage4"] / "provider_contract_terms.parquet"), pd.read_parquet(P["stage4"] / "estimated_rates.parquet"))
+            if (P["stage4"] / "estimated_rates.parquet").exists() else None,
+        "trust_band_rows": rf.trust_band.value_counts().to_dict() if "trust_band" in rf else None,
         "final_rate_file": {"rows": int(len(rf)), "unique_npis": int(len(rf_npis)), "unique_tins": int(rf.TIN.nunique()),
                             "unique_addresses": int(rf.Address.nunique()), "billing_codes": int(rf["Billing Code"].nunique()),
                             "rows_by_address_tier": rf.address_tier.value_counts().to_dict()},
@@ -105,6 +111,7 @@ def main():
           *([f"| All in-network prices (every code type) | {S['rates_all_codes']['rate_rows']:,} rows, {S['rates_all_codes']['billing_codes']:,} codes, {S['rates_all_codes']['unique_npis']:,} NPIs (every provider in the file) |"] if S.get("rates_all_codes") else []),
           *([f"| HiLabs codes priced by component | {S['hilabs_rates_by_component']} (facility = decoded revenue-code prices) |"] if S.get("hilabs_rates_by_component") else []),
           *([f"| Out-of-network allowed amounts (separate table) | {S['out_of_network']['payments']:,} payments, {S['out_of_network']['codes']} codes; median OON allowed / in-network rate {S['out_of_network']['median_oon_allowed_to_in_network']:.1f}x over {S['out_of_network']['codes_also_in_network']} shared codes |"] if S.get("out_of_network") else []),
+          *([f"| Contract formulas recovered (X% of Medicare) | {S['contract_terms']['providers']:,} providers: {S['contract_terms']['own_formula']}, +{S['contract_terms']['inherited_from_tin']} from their TIN; {S['contract_terms']['estimated_rates']:,} validated estimated rates (separate) |"] if S.get("contract_terms") else []),
           f"| Final rate file | {S['final_rate_file']['rows']:,} rows, {S['final_rate_file']['unique_npis']:,} NPIs, {S['final_rate_file']['unique_tins']:,} TINs, {S['final_rate_file']['unique_addresses']:,} addresses |",
           f"| **NPIs linked to a VERIFIED address** | **{al['pct_npis_with_verified_address']}%** (verified or probable: {al['pct_npis_with_verified_or_probable']}%) |",
           f"| **TINs linked to a VERIFIED address** | **{al['pct_tins_with_verified_address']}%** (verified or probable: {al['pct_tins_with_verified_or_probable']}%) |"]

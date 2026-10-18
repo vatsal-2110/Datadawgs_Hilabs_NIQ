@@ -25,6 +25,17 @@ def load_config(path: Path | None = None) -> dict:
 _DIGITS = re.compile(r"\D")
 
 
+def save_csv(df, path: Path) -> bool:
+    """Write a CSV copy of an output. If the file is open in Excel (Windows locks it), warn and go on: the parquet
+    copy, which every stage reads, is already written, so one open CSV must not stop the pipeline."""
+    try:
+        df.to_csv(path, index=False, encoding="utf-8")
+        return True
+    except PermissionError:
+        print(f"WARNING: {path} is open in another program (close it and re-run to refresh the CSV); skipped")
+        return False
+
+
 def norm_npi(x) -> str | None:
     """Return a 10-digit NPI string, or None if the value is not a valid-length NPI."""
     if x is None:

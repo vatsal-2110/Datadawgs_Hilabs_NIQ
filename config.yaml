@@ -16,6 +16,7 @@ paths:
   stage2: data/stage2
   stage4: data/stage4
   cms_pfs: data/raw/cms_pfs
+  cms_pfs_prior: data/raw/cms_pfs_2025
   cms_opps: data/raw/cms_opps
 
 http:
@@ -68,7 +69,8 @@ sources:
 
   # CMS Medicare benchmarks for C4 rate plausibility (src.stage4_medicare_benchmark)
   cms_pfs_rvu_zip: "https://www.cms.gov/files/zip/rvu26d.zip"                 # 2026 Physician Fee Schedule RVUs + GPCIs + localities (Oct release)
-  cms_opps_addenda_zip: "https://www.cms.gov/files/zip/2026-nfrm-opps-addenda.zip"   # CY2026 OPPS final rule addenda (Addendum B)
+  cms_pfs_prior_zip: "https://www.cms.gov/files/zip/rvu25d.zip"             # 2025 PFS (Oct): only for the data-currency test
+  cms_opps_addenda_zip: "https://www.cms.gov/files/zip/october-2026-opps-addendum-b.zip"   # OPPS Addendum B, Oct 2026 quarterly update (latest)
 
   # US Dept. of Labor EBSA Form 5500 FOIA datasets: plan sponsor EIN -> sponsor state (C1 evidence E3)
   dol_5500_urls:

@@ -289,8 +289,16 @@ reason never to treat them as unit rates.
 Schedule for the provider's own California locality**: (work RVU × GPCI + practice-expense RVU × GPCI + malpractice RVU
 × GPCI) × conversion factor 33.4009. Facility or non-facility practice expense is chosen by place of service, the 26/TC lines are used for those
 modifiers, and the locality comes from the county of the pair's best address (CMS locality–county file). Facility
-rates are compared with the 2026 OPPS national payment (Addendum B). Sources: CMS RVU26D (October 2026 release) and the
-CY2026 OPPS final-rule addenda [regulator].
+rates are compared with the OPPS national payment (Addendum B, October 2026 quarterly update). Sources: CMS RVU26D
+(October 2026 release) and OPPS Addendum B October 2026 [regulator].
+- **Is the Medicare data itself current? (tested, not assumed).** RVU26D is the 4th and latest 2026 quarter (released
+  2026-08-26); no later 2026 or 2027 file existed on the run date. We first used the annual OPPS rule (Dec 2025) and
+  replaced it with the October 2026 update: procedure rates are identical, and 16 of 85 matched codes changed, all
+  quarterly-priced drugs. Independent proof that 2026 is the right year: Health Net's own professional rates match the 2026 schedule
+  for the provider's locality and not the 2025 one. Exactly 100% of Medicare: 600 rows (2026) vs 0 (2025). At a
+  whole-number % of Medicare, as contracts are written: 1,744 of 3,740 (2026) vs 232 (2025), where chance alone gives about 374.
+  The check re-runs on every pipeline run (`c4_medicare_benchmark.txt`). While testing, we found CMS moved the conversion-factor
+  column in the 2026 file (a new "PRIC IND" column), so the loader now finds columns by header name.
 - 84.3% of HiLabs rate rows get a Medicare price (no Medicare price: drugs (ASP), lab fee schedule, packaged codes).
 - **Finding 1: the professional schedule is Medicare-pegged.** 99213 is $104.88 against Medicare LA $104.89, and 99214
   is exactly 100%. 18% of standard professional rates are within 1% of Medicare, and the common contract levels are 80%,
@@ -302,6 +310,31 @@ CY2026 OPPS final-rule addenda [regulator].
 - `rate_check` per row: HIGH/LOW_VS_PEERS (robust median/MAD z > 3.5 among the same code, component and modifier;
   714 rows), ABOVE_10X / BELOW_30PCT_MEDICARE (professional only; 167 rows, e.g. ECG read 93010 at $506.84 vs
   Medicare $8.63). Flagged rows are real file values and are kept, but C7 excludes them from peer comparisons.
+
+**Step 8: recover each provider's contract formula** (`python -m src.stage4_contract_terms` →
+`data/stage4/provider_contract_terms.csv`, `c4_contract_terms.txt`). Contracts on a Medicare-pegged schedule read "pay
+X% of Medicare", but the file only carries the dollars. For each provider we divide every professional rate by its
+own-locality Medicare price and find the percentage most of its codes agree on (±1%). EXACT means ≥ 2 codes with ≥ 80%
+of them on it; LIKELY ≥ 50%; SINGLE means one code; NONE means no shared multiplier. A provider with SINGLE/NONE inherits an
+EXACT formula from the other NPIs of its TIN (group contracts). Result: 2,570 providers. EXACT 349 (+252 inherited from
+their TIN), LIKELY 389, SINGLE 1,583, NONE 249. Of the 601 EXACT formulas, 429 sit at a whole-number % of Medicare.
+Common levels are 100% (167 providers), 95%, 84%, 90%, 70%. 1,817 of 2,503 professional rates fit their provider's
+formula to ±1%.
+
+**Step 9: estimate the missing rates, only where a test proves it works** (`data/stage4/estimated_rates.csv`, never mixed
+with real rates). For a provider with an EXACT formula, each HiLabs code of its specialty that the file does not price
+for it is estimated as multiplier × Medicare (non-facility, own locality). **Hide-and-check test (leave-one-out):** each
+known rate is hidden, the formula refit on the other codes and the hidden rate predicted.
+
+| formula used | tests | within 1% | within 5% | shipped |
+|---|---|---|---|---|
+| provider's own EXACT | 359 | 85.2% | **88.6%** | yes |
+| TIN's EXACT (fit without the provider) | 290 | 84.8% | **96.6%** | yes |
+| own LIKELY / SINGLE / NONE | 3,181 | 17–46% | 22–59% | **no** |
+| baseline: statewide median of the code | — | — | 28.6% | — |
+
+So 4,664 estimated rates (445 providers, 269 codes, confidence HIGH 3,151 / MEDIUM 1,513) are shipped. Formulas that
+failed the test produce no estimates.
 
 **Result:** 8,820 HiLabs rate rows · 2,995 NPIs · 2,356 TINs · 3,037 NPI–TIN pairs · 203 codes (professional: 7,547
 rows, 134 codes; facility: 1,273 rows, 120 codes, 176 NPIs). Office visit 99213 $104.88 and 99214 $188.24 (medians
@@ -318,7 +351,8 @@ primary-contract choice and contract count.
 |---|---|
 | Centene price transparency page: https://www.centene.com/price-transparency-files.html | the index files (C1) |
 | CMS 2026 Physician Fee Schedule RVU file, October release (RVUs, CA GPCIs, locality–county map): https://www.cms.gov/files/zip/rvu26d.zip | C4 step 7: Medicare price of every professional rate for the provider's own CA locality; C7 Medicare-normalised index |
-| CMS CY2026 OPPS final-rule addenda (Addendum B): https://www.cms.gov/files/zip/2026-nfrm-opps-addenda.zip | C4 step 7: Medicare outpatient-hospital price for facility rates |
+| CMS OPPS Addendum B, October 2026 quarterly update: https://www.cms.gov/files/zip/october-2026-opps-addendum-b.zip | C4 step 7: Medicare outpatient-hospital price for facility rates |
+| CMS 2025 PFS RVU file (October): https://www.cms.gov/files/zip/rvu25d.zip | C4 step 7: data-currency test only (Health Net fits 2026, not 2025) |
 | NPPES NPI Registry API: https://npiregistry.cms.hhs.gov/api/ | E2: where each file's providers practise |
 | US DOL EBSA Form 5500 / 5500-SF / Schedule A datasets 2023–2024: https://www.askebsa.dol.gov/FOIA%20Files/ | E3: employer state; T3: employer-declared HMO / PPO contracts |
 | CMS HCRP audit report, Health Net of California, HIOS 67138: https://www.cms.gov/files/document/ppfmg-ea-healthnetcalifornia-67138-2019-hcrp-5cr-013025.pdf | E4: issuer 67138 = Health Net of California, Inc. |

@@ -45,7 +45,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0"}
 PROD_RX = re.compile(r"^(?P<prod>(?:Full Network|ExcelCare|SmartCare|Salud HMO y M.s)(?: HMO| EOA)?"
@@ -257,7 +257,7 @@ def main():
     pr.loc[und, "basis"] = "NAME_ONLY"
     pr["uses_ppo_network"] = pr.final_network_use.isin(["PPO_NETWORK_PRIMARY", "PPO_NETWORK_TIER"])
     pr.to_parquet(P["stage2"] / "plan_network_prediction.parquet", index=False)
-    pr.to_csv(P["stage2"] / "plan_network_prediction.csv", index=False, encoding="utf-8")
+    save_csv(pr, P["stage2"] / "plan_network_prediction.csv")
 
     ev_only = pr[pr.evidence_based]
     L = ["C2 rebuilt: plan network predicted from plan design, plan documents and network brands (not the network word)",

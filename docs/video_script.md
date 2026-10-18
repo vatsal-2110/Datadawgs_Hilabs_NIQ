@@ -65,6 +65,11 @@ not from plan names. From that file we built **10,287 rate rows** (professional 
 - "When one provider has several prices for a service, they come from different contracts. We keep the primary contract's
   price, a real contracted rate, not an average nobody is paid. The out-of-network file is never mixed in: it proves which
   contracts the PPO plans do *not* use, and shows in-network prices are about 19x below what is paid out-of-network."
+- "Then we reverse-engineer the contracts. The file only shows dollars, but most contracts are written as 'X% of
+  Medicare'. We recover X for every provider: 167 sit at exactly 100%. Where the formula is exact we estimate the
+  codes the file is missing, but only after proving it: we hide real prices and predict them, and 89 to 97% land within
+  5%, against 29% for a simple guess. Formulas that fail that test produce no estimates. Every row also gets a trust score
+  out of 100, with the points shown."
 - "One rate per row: the standard, no-modifier office rate. Every variant, like telehealth, is in a second sheet."
 - "The analyst view filters by code, specialty and address tier. Cost effectiveness compares providers on the same code, in the same
   specialty and county, weighted by what matters for that specialty."
@@ -74,5 +79,5 @@ not from plan names. From that file we built **10,287 rate rows** (professional 
   cost-effective providers sit at 80% of Medicare, high-cost ones at 131%."
 
 ### 4:50–5:00 · Close
-"Everything re-runs with one command from the README, streams large files, runs in parallel, and passes 55 independent checks plus 35 unit tests,
+"Everything re-runs with one command from the README, streams large files, runs in parallel, and passes 58 independent checks plus 35 unit tests,
 including a full recomputation of every extracted rate."

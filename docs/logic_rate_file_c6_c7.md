@@ -20,6 +20,14 @@ hospital, …). These are legitimately different prices, not noise.
   for 4,063. 1,112 use modifier 95, because for those codes (e.g. psychotherapy) the provider is priced **only** with telehealth.
 - **Nothing hidden:** `n_rate_variants`, `variant_rate_min`/`max` and the full **Rate Variants** sheet keep every price.
 
+### D6.4 Trust score on every row (`trust_score`, `trust_band`, `trust_detail`)
+One number (0–100) saying how far to trust a row's rate, built from five independent checks. The points are shown on
+the row, so the score is never a black box:
+rate_check OK **30** · every contract pricing it agrees **15** (else 5) · fits the provider's recovered contract formula
+**20** (no formula 10, misfit 0) · PPO-network evidence CONFIRMED **20**, PRESUMED 12, MIXED 8, HMO_SIGNAL 0 · address
+VERIFIED **15**, PROBABLE 10, UNVERIFIED 4. Bands: HIGH ≥ 80 (5,539 rows), MEDIUM 60–79 (3,489), LOW < 60 (1,259).
+The Excel also has an **Estimated Rates** sheet (C4 step 9), kept apart from the real rates.
+
 ### D6.2 Which addresses
 Every VERIFIED and PROBABLE address of the (NPI, TIN). If there is none, the single best UNVERIFIED address, or NONE.
 So no rate is dropped for lack of an address, and the tier tells the user how far to trust it.

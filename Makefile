@@ -1,7 +1,7 @@
 # Run from the project root with the venv active. On Windows without `make`, run the commands directly.
 PY ?= python
 
-.PHONY: install stage1 stage1-sample profile pairs labels rates verify test grade fetch address c5audit scope-evidence plan-design network-evidence medicare c1c2excel specialty ratefile cost summary all ui
+.PHONY: install stage1 stage1-sample profile pairs labels rates verify test grade fetch address c5audit scope-evidence plan-design network-evidence scorecard medicare contract-terms c1c2excel specialty ratefile cost summary all ui
 
 install:
 	$(PY) -m pip install -r requirements.txt
@@ -50,6 +50,12 @@ scope-evidence:    ## C1: third-party proof of the CA commercial group scope
 
 plan-design:       ## C2: plan benefit design matched to Health Net 2026 plan documents
 	$(PY) -m src.stage2_plan_design_evidence
+
+contract-terms:    ## C4: recover each provider's contract formula; validated estimated rates
+	$(PY) -m src.stage4_contract_terms
+
+scorecard:         ## C3: scorecard for in-network, allowed-amounts and index files
+	$(PY) -m src.stage3_scorecard
 
 medicare:          ## C4: every rate vs Medicare 2026 (own CA locality) + robust outlier flags
 	$(PY) -m src.stage4_medicare_benchmark

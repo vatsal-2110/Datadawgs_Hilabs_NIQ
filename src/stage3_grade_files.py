@@ -32,7 +32,7 @@ from statistics import median
 import ijson
 import pandas as pd
 
-from src.common.normalize import load_config, norm_npi
+from src.common.normalize import load_config, norm_npi, save_csv
 from src.stage1_ingest_index import download
 
 WEIGHTS = {"M1_code_coverage": 25, "M2_provider_detail": 15, "M3_rate_validity": 15,
@@ -234,7 +234,7 @@ def main():
                      "negotiated_types": json.dumps(raw["negotiated_types"]), **score(raw)})
     df = pd.DataFrame(rows)
     df.to_parquet(out / "file_scores.parquet", index=False)
-    df.to_csv(out / "file_scores.csv", index=False, encoding="utf-8")
+    save_csv(df, out / "file_scores.csv")
 
     cols = ["role", "file_name", "overall_score"] + list(WEIGHTS)
     L = [f"C3 file grades (run {run_date}); weights: {WEIGHTS}", "=" * 90,

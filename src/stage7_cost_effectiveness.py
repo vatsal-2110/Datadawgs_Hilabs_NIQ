@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 MIN_PEERS, MIN_CODES = 5, 1
 
@@ -102,7 +102,7 @@ def main():
     prov.loc[(prov.weighted_cost_index >= 1.10) & (prov.pct_codes_below_median <= 0.40), "label"] = "HIGH_COST"
     prov.loc[prov.n_codes_compared < MIN_CODES, "label"] = "INSUFFICIENT_DATA"
     prov.to_parquet(s7 / "provider_cost_effectiveness.parquet", index=False)
-    prov.to_csv(s7 / "provider_cost_effectiveness.csv", index=False, encoding="utf-8")
+    save_csv(prov, s7 / "provider_cost_effectiveness.csv")
     print(f"providers scored: {len(prov):,} | code comparisons: {len(base):,} | peer scope: "
           f"{base.peer_scope.value_counts().to_dict()}")
     print(f"rates excluded as implausible (rate_check): {n_flag:,} provider-code combinations")

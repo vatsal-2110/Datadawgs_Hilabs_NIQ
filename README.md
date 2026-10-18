@@ -51,6 +51,7 @@ browser into `data/raw/index/<name>.json`.
 | C2 | `src.stage2_plan_labels` | labels every CA plan: product type + provider network, with evidence and confidence |
 | C2 | `src.stage2_provider_network` | PPO-network evidence per provider: practice county outside the HMO service area, PPO / HMO labels, capitation, price signature; carried into the rate file |
 | C2 | `src.stage2_network_evidence` | tests the labels against regulator product IDs (HIOS), employer Form 5500 Schedule A HMO/PPO declarations, and the documented legal entity / network of each product type |
+| C4+ | `src.stage4_contract_terms` | recovers each provider's contract formula (X% of Medicare); estimated rates for missing HiLabs codes, shipped only where a hide-and-check test passes |
 | C4+ | `src.stage4_medicare_benchmark` | every rate vs Medicare 2026 (own CA locality PFS / OPPS) and robust peer outliers → `pct_of_medicare`, `rate_check` |
 | C4 | `src.stage4_extract_rates` | streams the rate file: every price for every provider; decodes facility (RC) prices to their CPT/HCPCS code; one rate per service from the provider's primary contract; out-of-network allowed amounts as a separate table + benchmark |
 | C3 | `src.stage3_grade_files` | grades the used file + same-payer comparison files, **in parallel**, 7 weighted metrics |

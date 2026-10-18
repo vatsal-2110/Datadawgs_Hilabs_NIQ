@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 
 def main():
@@ -66,7 +66,7 @@ def main():
                      "specialty_source": src, "specialty_note": note})
     out = pd.DataFrame(rows)
     out.to_parquet(s5 / "npi_specialty.parquet", index=False)
-    out.to_csv(s5 / "npi_specialty.csv", index=False, encoding="utf-8")
+    save_csv(out, s5 / "npi_specialty.csv")
     print(pd.crosstab(out.specialty_source, out.enumeration_type, margins=True).to_string())
     print("\ntop unmapped:", out[out.specialty_source == "UNMAPPED"].specialty.value_counts().head(10).to_dict())
 

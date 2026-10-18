@@ -22,7 +22,7 @@ from pathlib import Path
 import ijson
 import pandas as pd
 
-from src.common.normalize import ROOT, load_config, norm_npi, norm_tin
+from src.common.normalize import ROOT, load_config, norm_npi, norm_tin, save_csv
 from src.stage1_ingest_index import download
 
 # Provider-level network hints written into tin.business_name (see logic D2.1). Order matters: first match wins.
@@ -143,7 +143,7 @@ def main(argv=None):
     assert not pairs.duplicated(["npi", "tin", "file_key"]).any()
 
     pairs.to_parquet(out_dir / "tin_npi_pairs.parquet", index=False)
-    pairs.to_csv(out_dir / "tin_npi_pairs.csv", index=False, encoding="utf-8")
+    save_csv(pairs, out_dir / "tin_npi_pairs.csv")
 
     lab = pairs.business_name_labels.replace("", "(none)").value_counts()
     print(f"\nwrote {out_dir / 'tin_npi_pairs.parquet'}")

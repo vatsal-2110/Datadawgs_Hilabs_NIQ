@@ -16,6 +16,7 @@
 | All in-network prices (every code type) | 264,439 rows, 1,276 codes, 3,734 NPIs (every provider in the file) |
 | HiLabs codes priced by component | {'facility': 120, 'professional': 134} (facility = decoded revenue-code prices) |
 | Out-of-network allowed amounts (separate table) | 1,970 payments, 336 codes; median OON allowed / in-network rate 24.3x over 158 shared codes |
+| Contract formulas recovered (X% of Medicare) | 2,570 providers: {'SINGLE': 1583, 'LIKELY': 389, 'EXACT': 349, 'NONE': 249}, +252 from their TIN; 4,664 validated estimated rates (separate) |
 | Final rate file | 10,287 rows, 2,995 NPIs, 2,356 TINs, 3,035 addresses |
 | **NPIs linked to a VERIFIED address** | **44.8%** (verified or probable: 46.6%) |
 | **TINs linked to a VERIFIED address** | **41.1%** (verified or probable: 43.5%) |

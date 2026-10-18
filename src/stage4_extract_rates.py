@@ -35,7 +35,7 @@ from statistics import median
 import ijson
 import pandas as pd
 
-from src.common.normalize import load_config, norm_npi, norm_tin
+from src.common.normalize import load_config, norm_npi, norm_tin, save_csv
 from src.stage1_ingest_index import download
 from src.stage4_tin_npi_pairs import business_label
 
@@ -206,13 +206,13 @@ def main(argv=None):
     allr.to_parquet(out_dir / "rates_all.parquet", index=False)
     rates = allr[allr.is_hilabs_code].drop(columns="is_hilabs_code").reset_index(drop=True)
     rates.to_parquet(out_dir / "rates.parquet", index=False)
-    rates.to_csv(out_dir / "rates.csv", index=False, encoding="utf-8")
+    save_csv(rates, out_dir / "rates.csv")
 
     # out-of-network: separate table + benchmark vs in-network (same code, same billing class)
     o = pd.concat(oon, ignore_index=True) if oon else pd.DataFrame()
     if len(o):
         o.to_parquet(out_dir / "oon_allowed.parquet", index=False)
-        o.to_csv(out_dir / "oon_allowed.csv", index=False, encoding="utf-8")
+        save_csv(o, out_dir / "oon_allowed.csv")
         inn = allr[allr.negotiation_arrangement.ne("capitation")].groupby(["billing_code", "billing_class"]).agg(
             in_network_median=("rate", "median"), in_network_providers=("npi", "nunique")).reset_index()
         oo = o.groupby(["billing_code", "billing_class"]).agg(

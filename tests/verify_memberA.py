@@ -175,6 +175,22 @@ def main():
           ((rm.pct_of_medicare[ok] - 100 * rm.rate[ok] / rm.medicare_rate[ok]).abs() < 0.06).all() and rm.rate_check.notna().all(),
           f"{int(ok.sum()):,} benchmarked rows")
 
+    # ---------------- C4 contract terms, estimates, trust score
+    ct = pd.read_parquet(s4 / "provider_contract_terms.parquet")
+    es = pd.read_parquet(s4 / "estimated_rates.parquet")
+    real = set(map(tuple, rm[["npi", "tin", "billing_code"]].fillna("").values))
+    check("Estimates: never overlap a real rate; estimated = multiplier x Medicare; only EXACT formulas",
+          not any(k in real for k in map(tuple, es[["npi", "tin", "billing_code"]].fillna("").values))
+          and ((es.estimated_rate - es.multiplier_pct * es.medicare_rate_nonfacility / 100).abs() < 0.011).all()
+          and es.formula_class.eq("EXACT").all() and es.is_estimate.all(), f"{len(es):,} estimates")
+    ex = ct[ct.formula_class.eq("EXACT") & ct.formula_source.eq("own")]
+    check("Contract terms: EXACT = >= 2 codes and >= 80% of them on the multiplier",
+          ((ex.n_codes >= 2) & (ex.n_codes_on_multiplier / ex.n_codes >= 0.8)).all(), f"{len(ex):,} EXACT providers")
+    rf6 = pd.read_parquet(P["stage6"] / "provider_rate_file.parquet")
+    parts = rf6.trust_detail.str.findall(r"(\d+)/").map(lambda x: sum(map(int, x)))
+    check("C6 trust_score = sum of its five parts, within 0-100", (parts == rf6.trust_score).all()
+          and rf6.trust_score.between(0, 100).all(), str(rf6.trust_band.value_counts().to_dict()))
+
     # ---------------- C3 grades
     sc = pd.read_parquet(P["stage3"] / "file_scores.parquet")
     from src.stage3_grade_files import WEIGHTS
@@ -256,7 +272,7 @@ def main():
     check("C6: headline Rate = independent recomputation of rule D6.1", len(mm) == len(exp)
           and ((mm.exp - mm.Rate).abs() < 1e-9).all(), f"{len(mm):,} combinations")
     xl = pd.ExcelFile(P["stage6"] / "provider_rate_file.xlsx")
-    check("C6: Excel has the 3 sheets and all rows", set(xl.sheet_names) == {"Rate File", "Rate Variants", "Read Me"}
+    check("C6: Excel has the 4 sheets and all rows", set(xl.sheet_names) == {"Rate File", "Rate Variants", "Estimated Rates", "Read Me"}
           and len(pd.read_excel(xl, "Rate File", usecols=[0])) == len(rf))
 
     # ---------------- C7 labels follow thresholds

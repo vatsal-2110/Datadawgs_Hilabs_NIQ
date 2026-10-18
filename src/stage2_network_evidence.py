@@ -28,7 +28,7 @@ import zipfile
 
 import pandas as pd
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 NOT_HN = r"NETWORK|VERITY|FIRST CHOICE|UPMC|COMMUNITY"   # carriers whose names merely contain "health net..."
 
@@ -142,13 +142,13 @@ def write_decisions(cfg, lab: pd.DataFrame):
              "name_evidence"]
     pl = pl[front + [c for c in pl.columns if c not in front]]
     pl.to_parquet(P["stage2"] / "plan_labels.parquet", index=False)
-    pl.to_csv(P["stage2"] / "plan_labels.csv", index=False, encoding="utf-8")
+    save_csv(pl, P["stage2"] / "plan_labels.csv")
 
     sub = pl[["plan_name", "plan_id", "plan_id_format", "final_network_use", "is_ppo_network", "decided_by",
               "evidence", "cross_checks", "sources", "evidence_confidence", "plan_row_id"]].copy()
     sub["in_network_rate_file"] = rate_files   # from C1 files.parquet, not typed in
     sub = sub.sort_values(["is_ppo_network", "final_network_use", "plan_name"], ascending=[False, True, True])
-    sub.to_csv(P["stage2"] / "ppo_network_decisions.csv", index=False, encoding="utf-8")
+    save_csv(sub, P["stage2"] / "ppo_network_decisions.csv")
     sub.to_parquet(P["stage2"] / "ppo_network_decisions.parquet", index=False)
     print(f"wrote plan_labels.csv and ppo_network_decisions.csv: decided by {sub.decided_by.value_counts().to_dict()}")
 
@@ -207,7 +207,7 @@ def main():
             "t3_employer_agrees", "t4_entity", "t4_regulator", "t4_network", "t4_source", "evidence_confidence"]
     out = lab[cols]
     out.to_parquet(P["stage2"] / "plan_label_evidence.parquet", index=False)
-    out.to_csv(P["stage2"] / "plan_label_evidence.csv", index=False, encoding="utf-8")
+    save_csv(out, P["stage2"] / "plan_label_evidence.csv")
     write_decisions(cfg, lab)
 
     # ---- report

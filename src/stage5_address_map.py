@@ -43,7 +43,7 @@ import pandas as pd
 import requests
 
 from src.common.address import building_key, standardize_address
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 STOP = {"INC", "LLC", "MD", "M", "D", "THE", "OF", "A", "PC", "CORP", "CORPORATION", "GROUP", "MEDICAL", "ASSOCIATES",
         "PLLC", "LTD", "CO", "AND", "&", "CENTER", "HEALTH"}
@@ -268,7 +268,7 @@ def main():
     missing = missing[missing._merge == "left_only"][["npi", "tin"]].assign(tier="NONE", is_best=True, rank_in_pair=1)
     res = pd.concat([ev, missing], ignore_index=True)
     res.to_parquet(s5 / "npi_tin_address.parquet", index=False)
-    res.to_csv(s5 / "npi_tin_address.csv", index=False, encoding="utf-8")
+    save_csv(res, s5 / "npi_tin_address.csv")
 
     best = res[res.is_best]
     npis = pairs.npi.dropna().unique()

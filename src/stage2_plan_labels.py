@@ -17,7 +17,7 @@ import re
 
 import pandas as pd
 
-from src.common.normalize import load_config
+from src.common.normalize import load_config, save_csv
 
 # Sources for researched facts (retrieved 2026-10-17)
 SRC_TYPES = "https://www.healthnet.com/en_us/find-a-plan/large-employers/type-of-plans.html"
@@ -144,7 +144,7 @@ def main():
     out["name_segment"] = out.plan_name.map(name_segment)
     out["multi_network_words"] = out.tokens_found.str.contains(r"\+")
     out.to_parquet(out_dir / "plan_labels.parquet", index=False)
-    out.to_csv(out_dir / "plan_labels.csv", index=False, encoding="utf-8")
+    save_csv(out, out_dir / "plan_labels.csv")
 
     print(f"in-scope plan rows: {len(out):,}  (distinct names {out.plan_name.nunique():,})\n")
     t = out.groupby(["product_type", "provider_network", "confidence", "rule"]).agg(rows=("plan_row_id", "size"),
