@@ -6,7 +6,9 @@ Rules, first match wins (logic D5.6); every row records specialty_source:
   3 FACILITY_MAP      a taxonomy is in config specialty.facility_taxonomy_map (NUCC-verified facility codes)
   4 CODE_PROFILE      from the HiLabs codes the NPI is priced on: score each specialty by the share of its
                       Spec-Proc weight those codes cover; accept the top one only if it beats the runner-up
-                      by config specialty.code_profile_min_ratio
+                      by config specialty.code_profile_min_ratio. Individuals (NPI-1): professional prices only
+                      (a facility fee describes the building, not the clinician). Organizations (NPI-2):
+                      professional AND facility prices - an organization's specialty is its service mix
   5 UNMAPPED          kept, labelled with the NUCC description of its primary taxonomy
 
 Output: data/stage5/npi_specialty.parquet (+ .csv)
@@ -34,8 +36,10 @@ def main():
 
     nppes = pd.read_parquet(s5 / "nppes_npi.parquet")
     rates = pd.read_parquet(cfg["paths"]["stage4"] / "rates.parquet")
-    # professional codes only: a facility fee says what the building does, not the clinician's specialty
-    priced = rates[rates.component.eq("professional")].dropna(subset=["npi"]).groupby("npi").billing_code.agg(set).to_dict()
+    # individuals: professional codes only (a facility fee says what the building does, not the clinician);
+    # organizations: every priced code (their specialty IS their service mix)
+    priced_prof = rates[rates.component.eq("professional")].dropna(subset=["npi"]).groupby("npi").billing_code.agg(set).to_dict()
+    priced_all = rates.dropna(subset=["npi"]).groupby("npi").billing_code.agg(set).to_dict()
     spec_tot = sp.groupby("SPEC_CD").w.sum()
     ratio = cfg["specialty"]["code_profile_min_ratio"]
 
@@ -51,7 +55,7 @@ def main():
         elif any(c in fac for c in codes):
             spec, src = fac[next(c for c in codes if c in fac)], "FACILITY_MAP"
         else:
-            pc = priced.get(r.npi, set())
+            pc = (priced_all if getattr(r, "enumeration_type", None) == "NPI-2" else priced_prof).get(r.npi, set())
             if pc:
                 sc = (sp[sp.PROC_CD.isin(pc)].groupby("SPEC_CD").w.sum() / spec_tot).dropna().sort_values(ascending=False)
                 if len(sc) and (len(sc) == 1 or sc.iloc[0] >= ratio * sc.iloc[1]):

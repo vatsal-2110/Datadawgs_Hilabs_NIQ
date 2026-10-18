@@ -65,28 +65,34 @@ def c1_book(cfg):
                "example_url", "file_key"]].sort_values(["in_scope", "n_plan_rows"], ascending=False)
     sv = sev.drop(columns=[c for c in ("c1_in_scope",) if c in sev]).sort_values("n_plans", ascending=False)
 
+    pfm = pd.read_parquet(P["stage1"] / "plan_file_map.parquet")
+    ins = files[files.in_scope]
+    e = sev.dropna(subset=["geo_top_state_pct"])
+    e2 = "; ".join(f"{r.structure_id} ({'in scope' if r.c1_in_scope else 'out'}): {r.geo_top_state_pct}% {r.geo_top_state}"
+                   for r in e.itertuples())
+    e = sev.dropna(subset=["employer_top_state_pct"])
+    e3 = "; ".join(f"{r.structure_id}: {r.employer_top_state_pct}% {r.employer_top_state}" for r in e.itertuples())
+    e4 = "; ".join(f"{k} {v['entity']} ({v['state']})" for k, v in cfg["evidence"]["hios_issuers"].items())
     readme = [
         ("What this is", "C1 deliverable: Centene's index files parsed into one table (brand, plan name, plan ID, market "
                          "type, rate file URL), duplicate files removed, and the California commercial group scope "
                          "proven with third-party evidence."),
-        ("Index files", "11 Centene index files (Health Net, Ambetter, Fidelis, QualChoice + 7 QualChoice sub-indexes), "
-                        "3,275 plan rows; 80 rate-file references -> 66 unique files (URL without signed query string)."),
+        ("Index files", f"{plans.index_name.nunique()} Centene index files ({', '.join(sorted(plans.brand.unique()))}), "
+                        f"{len(plans):,} plan rows; {pfm[['structure_id', 'file_key']].drop_duplicates().shape[0]} rate-file "
+                        f"references -> {len(files)} unique files (URL without signed query string)."),
         ("C1 Plan-File Table", "One row per unique (plan, rate file). Each plan lists an in-network file and an "
                                "allowed-amounts file. in_scope = CA commercial group."),
         ("scope_verdict_from_evidence", "Verdict of the reporting structure from independent tests (Scope Evidence "
                                         "sheet). Agrees with in_scope for every structure."),
         ("Scope Evidence: E1 market", "plan_market_type in the index (group / individual)."),
         ("Scope Evidence: E2 providers", "NPPES practice state of the providers in the structure's in-network file "
-                                         "(Health Net CA: 96.6% CA; Health Net 'Oregon': 97.3% OR)."),
+                                         f"(top state per structure: {e2})."),
         ("Scope Evidence: E3 employers", "Group plan IDs are employer EINs, matched to US DOL Form 5500 / 5500-SF "
-                                         "filings 2023-2024 (Health Net CA: 76.3% CA; 'Oregon': 99.2% OR; QualChoice: "
-                                         "100% AR)."),
+                                         f"filings (top state: {e3})."),
         ("Scope Evidence: E4 issuer", "HIOS issuer ID -> licensed company and state from CMS / state regulator "
-                                      "filings (67138 Health Net of California; 10940 Health Net Oregon; 37903 / "
-                                      "70525 QualChoice / QCA Arkansas; 25303 Fidelis NY)."),
-        ("Result", "In scope: 1,312 Health Net CA plans in one structure, using one in-network file "
-                   "(2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json) and one allowed-amounts "
-                   "file."),
+                                      f"filings (config evidence.hios_issuers: {e4})."),
+        ("Result", f"In scope: {int(plans.in_scope.sum()):,} plans in {plans[plans.in_scope].structure_id.nunique()} "
+                   f"structure(s), using: {'; '.join(f'{r.file_role} {r.file_name}' for r in ins.itertuples())}."),
         ("Logic", "docs/logic_ppo_network.md section 1; report data/stage1/c1_scope_evidence.txt"),
     ]
     out = P["stage1"] / "C1_index_plans_and_files.xlsx"
@@ -159,12 +165,12 @@ def c2_book(cfg):
         ("Result", f"PPO network primary: {nu.get('PPO_NETWORK_PRIMARY', 0)} plans; PPO network as a tier (EOA, POS): "
                    f"{nu.get('PPO_NETWORK_TIER', 0)}; HMO network only: {nu.get('HMO_NETWORK_ONLY', 0)}; EPO network: "
                    f"{nu.get('EPO_NETWORK', 0)}. {nev} of {len(pl)} plans classified from evidence (plan design / "
-                   f"own SBC / HSA design / network brand vs Health Net's 2026 plan documents); evidence disagrees "
-                   f"with the plan name 0 times. PPO rate file: {rate_file} (shared by all CA plans)."),
-        ("final_network_use / basis", "EVIDENCE = from Health Net 2026 plan documents (Design Catalog sheet); "
+                   f"own SBC / HSA design / network brand vs Health Net's {cfg['evidence']['plan_document_year']} plan documents; agreement with the plan "
+                   f"name: data/stage2/c2_plan_design.txt). PPO rate file: {rate_file} (shared by all CA plans)."),
+        ("final_network_use / basis", f"EVIDENCE = from Health Net {cfg['evidence']['plan_document_year']} plan documents (Design Catalog sheet); "
                                       "PRODUCT_DOCUMENT = POS / EPO product documents; NAME_ONLY = employer-custom or "
                                       "exchange plan with no public document, so the name's network word is used."),
-        ("Design Catalog", "Every Health Net 2026 large-group plan overview and small-group SBC: product, design, and "
+        ("Design Catalog", f"Every Health Net {cfg['evidence']['plan_document_year']} large-group plan overview and small-group SBC: product, design, and "
                            "what the document itself says: contract (Certificate of Insurance = PPO; Evidence of "
                            "Coverage = HMO/EOA), out-of-network benefit column (PPO only), HMO/PPO tiers (EOA only)."),
         ("Plan Labels: rule", "R1 EOA > R2 POS > R3 EPO > R4 HMO > R5 PPO > R6 Salud family = HMO (first match wins)."),

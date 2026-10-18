@@ -22,11 +22,22 @@ statewide study in section 3.4, which is labelled as such.
 | **NPPES API**: primary LOCATION + secondary practice locations | the provider's self-reported practice sites; taxonomy | maintained by the provider |
 | **NPPES API**: endpoint affiliation addresses | an address entered separately from the practice location, usually by the EHR/HIE that registered the provider's Direct/FHIR endpoint | same registry, so counted in the **NPPES family** (it can't confirm NPPES on its own); it can surface a site that other sources then confirm |
 | **CMS Doctors & Clinicians (DAC)**, refreshed monthly (dataset modified 2026-10-02) | practice addresses from **Medicare enrolment** (PECOS), with the **group name** per address | a different system with its own verification |
-| **CMS facility registries** (hospital, ambulatory surgery, DME, home health; CA rows) | official addresses of **organizations**, which DAC doesn't cover | CMS certification/enrolment data |
+| **CMS facility registries**, CMS Provider Data Catalog (https://data.cms.gov/provider-data/), CA rows: hospital `xubh-q36u`, ambulatory surgery `4jcv-atw7`, medical equipment suppliers `ct36-nrcq`, home health `6jpm-sxkc`; **added 2026-10-18:** dialysis `23ew-n7w9` (734 CA), hospice `yc9t-dgbk` (1,913), inpatient rehabilitation `7t8x-u3ir` (83), long-term care hospitals `azum-44iv` (20), nursing homes `4pq5-n9py` (1,165) | official addresses of **organizations**, which DAC doesn't cover. Matched as before: same building + a shared name word | CMS certification/enrolment data |
+| **California Department of Public Health (CDPH), Licensed and Certified Healthcare Facility Listing**, data date 2026-10-16: https://data.chhs.ca.gov/dataset/healthcare-facility-locations (CSV: `config.yaml` `sources.cdph_facility_locations_csv`) | the **state licensing address** of hospitals, surgery centres, clinics, home health, dialysis, nursing facilities…, **with the facility's NPI**, so matching is exact (NPI), not by name. 7,372 open facilities carry an NPI; 491 of our NPIs are listed | a state regulator's inspection and licensing record, separate from NPPES (self-reported) and from Medicare enrolment. Also used as the **referee** of the accuracy audit (§3.6) |
 | **US Census geocoder** | confirms the address **exists**; returns a standard form, county and coordinates (used by C7 peers) | an authoritative address reference |
 | NPPES MAILING address | **not used**: a billing or mail address, not a place where care is given | — |
 
-**Considered, not used:** Health Net's FHIR provider directory (behind a login on Centene's developer portal); Health
+**Considered, not used (2026-10-18):**
+- **CMS Open Payments, Covered Recipient Profile Supplement** (https://download.cms.gov/openpayments/, file PHPRFL_P01232026):
+  downloaded and **rejected**. Its README says the profile addresses are *"derived from … NPPES and PECOS"*, the same
+  systems as our NPPES and DAC sources, so counting it would let one source confirm itself. The independent addresses
+  (reported by manufacturers) are only in the payment-record files (> 1 GB; the Open Payments API that would allow a
+  filtered download returned HTTP 403 to us).
+- **CMS Provider of Services file, clinical laboratories (CLIA)**: would cover the ~100 unverified labs, but the
+  data.cms.gov catalog and dataset pages returned HTTP 403 on 2026-10-18, so it could not be downloaded reproducibly.
+- **Medicare Physician & Other Practitioners (claims)**: its provider addresses come from NPPES, so not independent.
+
+Earlier: Health Net's FHIR provider directory (behind a login on Centene's developer portal); Health
 Net's public directory JSON (Medi-Cal only, not commercial); HiLabs MCheck/R3 (not available to us; it would replace
 the Census step). The NPPES `Parent Organization TIN` field would be a direct TIN source, but NPPES redacts it:
 every populated value is `<UNAVAIL>` (checked on the full Oct-2026 NPPES file). So **TIN links come only from the rate file.**
@@ -68,8 +79,8 @@ every populated value is `<UNAVAIL>` (checked on the full Oct-2026 NPPES file). 
 
 | Tier | Rule | Meaning |
 |---|---|---|
-| **VERIFIED** | geocoded **and** (2 independent source families agree **or** 1 family + TIN corroboration **or** 1 family + DAC group-name match), not a PO box | confirmed by two separate pieces of evidence |
-| **PROBABLE** | geocoded **and** one **non-NPPES** source (DAC, the organization's Medicare group, or a CMS facility registry) | an independent system lists it, but nothing else agrees yet |
+| **VERIFIED** | the address **exists** (D5.10) **and** (2 independent source families agree **or** 1 family + TIN corroboration **or** 1 family + DAC group-name match), not a PO box | confirmed by two separate pieces of evidence |
+| **PROBABLE** | the address **exists** **and** one **non-NPPES** source (DAC, the organization's Medicare group, a CMS facility registry, or the CDPH state licence) | an independent system lists it, but nothing else agrees yet |
 | **UNVERIFIED** | everything else: NPPES-only addresses, addresses that don't geocode, PO boxes | kept and labelled, never silently dropped |
 | NONE | no candidate address at all | reported |
 
@@ -103,12 +114,12 @@ fell from 538 to 68 pairs; those addresses are honestly UNVERIFIED (NPPES-only).
 |---|---|
 | NPIs in the PPO file | 3,734 |
 | Baseline (MCheck-style): an NPPES primary address exists | 3,726 |
-| … and an independent source confirms it | 1,613 (43.2%) |
-| **Pipeline: NPIs with ≥ 1 VERIFIED address** | **1,671 (44.8%)** |
-| … verified only at an address that is *not* their NPPES primary | 58 |
-| (NPI, TIN) pairs whose best address is not the NPPES primary | 190 |
+| … and an independent source confirms it | 1,803 (48.3%) |
+| **Pipeline: NPIs with ≥ 1 VERIFIED address** | **1,859 (49.8%)** |
+| … verified only at an address that is *not* their NPPES primary | 56 |
+| (NPI, TIN) pairs whose best address is not the NPPES primary | 214 |
 
-**Reading:** for 56.8% of NPIs, the NPPES primary address can't be confirmed by any independent source. The pipeline
+**Reading:** for 51.7% of NPIs, the NPPES primary address can't be confirmed by any independent source. The pipeline
 doesn't hide that behind a confident-looking address: it labels them UNVERIFIED. Where it does better than the baseline
 is (a) a confirmed address for 58 NPIs whose NPPES primary is not confirmed, (b) 190 pairs where a better-supported
 address outranks the NPPES one, and (c) one-to-many: 189 NPIs and 220 TINs carry more than one confirmed or probable site.
@@ -129,6 +140,38 @@ Run on all 1.26 M active California NPIs, independent of the PPO network, to tes
   outlier 23%** · Medicare the outlier 14% · endpoint the outlier 14% · all differ 25%. NPPES is the least reliable
   single source, but Medicare is also wrong in 14%. **That's why tiers reward agreement between sources, not trust
   in any single one.**
+
+### 3.7 D5.10 "The address exists": Census geocoder, or a government record of the same building
+**Problem:** VERIFIED required a US Census geocoder match, to prove the address exists. 437 address rows failed it, and
+**170 of them already had 2+ independent source families agreeing on the same building.** Examples are Stanford's
+300 Pasteur Drive and "12401 Washington Blvd, Whittier" (a hospital). Census address ranges miss large campuses and new
+buildings. Retrying with Census's single-address service matched only 1 of 6 test addresses.
+**Rule:** an address exists if the Census geocoder matches it, **or** a government record outside NPPES lists that
+exact building (standardized street + ZIP5): Medicare enrolment (DAC), a CMS facility certification, or the CDPH state
+licence. Each of these validates addresses in its own system. NPPES alone (self-reported) never proves existence.
+Column `address_exists_by` = CENSUS_GEOCODER / GOVERNMENT_RECORD.
+**Result:** 120 more VERIFIED best addresses. **Tested, not assumed:** in the hold-out audit (§3.6), VERIFIED accuracy
+went from 96.7% (396 pairs) to **97.5% (441 pairs)**, so the rescued addresses are right.
+
+### 3.6 D5.9 How accurate is each tier? Hold-out audit against the state licensing record
+**Why:** a tier is only useful if it predicts whether the address is right. We measured that against a referee that
+the tiers did **not** use. **How:** C5 runs twice. Run 1 builds the mapping **without CDPH**. Then, for every pair whose
+NPI the state lists, CDPH referees run 1's addresses: correct = same building (standardized street + ZIP5) or within
+250 m of the state's geocoded location. Run 2 adds CDPH as a source and is the output. [regulator: CDPH 2026-10-16]
+
+| Tier (best address of the pair, run 1) | Pairs refereed | Same building as the state licence | Same ZIP |
+|---|---|---|---|
+| **VERIFIED** | 441 | **97.5%** | 98.2% |
+| UNVERIFIED | 50 | **86.0%** | 90.0% |
+| PROBABLE | 0 | not measurable | — |
+
+Over **all** candidate addresses, not only the best one: VERIFIED 90.6%, UNVERIFIED 45.5%. Unverified *alternative*
+addresses are usually old or secondary sites, which is why only the best one is shown in the rate file.
+**What it changes:** every address row carries `expected_accuracy` (VERIFIED 0.975, UNVERIFIED 0.86; blank for PROBABLE),
+which the rate file shows as `address_expected_accuracy`. "UNVERIFIED" means "one source only", and for licensed facilities
+that one source is still right about 86% of the time. **Limit:** the referee lists licensed facilities (organizations), so the
+figures describe organization addresses; individual clinicians are not in the state facility list.
+`data/stage5/c5_cdph_audit.parquet` holds every refereed address.
 
 ### 3.5 Mistakes caught and fixed (kept here on purpose)
 1. **Circular name evidence.** DAC group addresses were *selected* by an exact name match, and the rule then counted that
@@ -160,11 +203,16 @@ so those physicians stay Unmapped even though their taxonomies are individual on
 | Measure | Value |
 |---|---|
 | (NPI, TIN) pairs | 3,780 (8 with no address in any source) |
-| Distinct candidate addresses / confirmed to exist by the Census geocoder | 4,252 / 3,953 (93.0%) |
-| **NPIs with ≥ 1 VERIFIED address** | **1,671 of 3,734 (44.8%)** (verified or probable: 46.6%) |
-| **TINs with ≥ 1 VERIFIED address** | **1,188 of 2,888 (41.1%)** (verified or probable: 43.5%) |
-| Best address per pair | VERIFIED 1,687 · PROBABLE 68 · UNVERIFIED 2,017 · NONE 8 |
-| How VERIFIED best addresses were confirmed | 2+ independent source families 1,558 · TIN corroboration 126 · DAC name match 3 |
+| Distinct candidate addresses / confirmed to exist by the Census geocoder | 4,331 / 4,023 (92.9%) |
+| **NPIs with ≥ 1 VERIFIED address** | **1,859 of 3,734 (49.8%)** (verified or probable: 51.8%); was 44.8% before 2026-10-18 |
+| **TINs with ≥ 1 VERIFIED address** | **1,302 of 2,888 (45.1%)** (verified or probable: 47.6%); was 41.1% |
+| Best address per pair | VERIFIED 1,876 · PROBABLE 77 · UNVERIFIED 1,819 · NONE 8 |
+| How VERIFIED best addresses were confirmed | 2+ independent source families 1,750 · TIN corroboration 123 · DAC name match 3 |
+| How their existence was proven (D5.10) | Census geocoder 1,756 · government record of the same building 120 |
+| CMS registries confirming best addresses | hospital 315, equipment supplier 243, surgery centre 174, nursing home 58, rehab hospital 53, home health 52, hospice 34, dialysis 24 |
+| Best addresses confirmed by the CDPH state licence | 485 |
+| **Measured accuracy (hold-out audit, §3.6)** | VERIFIED **97.5%**, UNVERIFIED **86.0%** same building as the state licence |
+| What 2026-10-18 added (44.8% → 49.8% NPIs) | CDPH state licence +1.6 points; five more CMS registries and the existence rule (D5.10) +3.4 points |
 | Endpoint addresses | 212 candidate rows, 87 VERIFIED (confirmed by another family or the TIN) |
 | One-to-many | 220 TINs and 189 NPIs have more than one VERIFIED/PROBABLE address (max 42 for one pair) |
 

@@ -183,6 +183,24 @@ The network word is read with a fixed precedence (EOA > POS > EPO > HMO > PPO; S
 narrower product wins when a name carries two words ("CUS PPO … EPO"). For the 1,176 plans with evidence these rules
 were not used to decide, only to measure agreement.
 
+### 3.8 Conflicts and how we resolved them (PPO network, C1 → C6)
+One rule throughout: **independent evidence beats the label in the file; when evidence is missing we say so, and we
+never drop data silently.** Every conflict below is resolved the same way each run, and the losing value is kept in a
+column or sheet so a reviewer can check it.
+
+| # | Conflict | Resolution | Where it is recorded |
+|---|---|---|---|
+| 1 | The plan **name** says one network, the plan's **benefit design** (Health Net plan documents) says another | Evidence wins; the name is used only when no document exists (60 of 453 PPO plans), and that is labelled `basis = NAME_ONLY`. On the plans with both, evidence and name never disagreed | `plan_labels.csv` (`final_network_use`, `basis`, `name_evidence`) |
+| 2 | Name contains both "PPO" and "EPO" (3 plans) | The specific product wins: EPO, its own PureCare One EPO network (CA Dept. of Insurance filing), not PPO | §3.6, `plan_labels.csv` |
+| 3 | EOA and POS plans also reach PPO providers (as an out-of-network or second tier) | They are HMO-based products (Health Net's own definition, Evidence of Coverage contract form), so **not PPO plans**: counted separately as `PPO_NETWORK_TIER` (133), never in the 453 | §3.3–3.4 |
+| 4 | Plan ID labelled `ein` but formatted as a 10-character HIOS ID (154 rows), or the placeholder 999999999 (3 rows) | The format decides the type; placeholders are classified by plan design only | C1 table `plan_id_format`; C3 index metric "Correct plan IDs" |
+| 5 | A Health Net reporting structure looks Californian by brand but its providers and employers are in Oregon | Third-party evidence (NPPES practice states 97.3% OR, employers 99.2% OR, HIOS issuer 10940 Oregon) wins: out of scope | §1, C1 Excel "Scope Evidence" |
+| 6 | All CA plans, PPO and HMO, point to the **same** rate file with no network field: which providers are PPO? | Provider-level evidence (§4.1). Providers with HMO-only evidence (paid out-of-network by the PPO plans, capitation, IPA / Ambetter-HMO label) leave the C6 Rate File for the sheet "Excluded - HMO signals" with the reason; providers with a proven PPO sign **and** an HMO sign (MIXED, 3) stay, flagged | `provider_network_evidence.csv`; C6 sheet "Excluded - HMO signals" |
+| 7 | One provider, one service, several prices from different contracts | The provider's **primary contract** (the provider_reference that prices the most services): a real contracted price, not an average nobody is paid; all prices kept | §5 step 4; Rate Variants sheet |
+| 8 | A professional fee and a facility fee for the same code | Different services, never averaged; the headline uses the provider's own component; C7 compares like with like | §5 step 3; `rate_component` |
+| 9 | In-network rate vs out-of-network allowed amount for the same code | Never mixed: the allowed amount is a payment, not a negotiated rate; used only as evidence (#6) and as a benchmark | §5 step 6 |
+| 10 | Address sources disagree (NPPES vs Medicare vs registries vs state licence) | Agreement between independent families decides the tier; no single source is trusted alone; every candidate is kept with its tier | `docs/logic_address_mapping.md` §2 (conflicts) |
+
 ## 4. Can the providers inside the shared file be split into PPO vs HMO?
 Tested from five angles; all say **no**:
 1. **No network field.** `network_name` is empty in **2,825 of 2,825** provider groups. [data]
@@ -229,7 +247,9 @@ p = 0.0001 confirmed vs HMO), so this is supporting evidence, not proof.
 **What this changes.** (1) D2.7 is no longer only an argument from absence: 210 pairs are proven PPO-network
 contracts that cannot be HMO contracts, and the presumed majority is priced like them. (2) Every row of the final rate
 file carries `ppo_network_evidence`, so a contracting team can keep a strictly proven view (PPO_CONFIRMED) or the full
-network view. (3) The 168 HMO-signal pairs stay flagged, not dropped.
+network view. (3) **Updated 2026-10-18 (D6.5):** the HMO-signal providers are moved **out** of the Rate File into the
+sheet "Excluded - HMO signals" (1,442 rows, 135 providers with rates, each with its reason), because the PS asks for PPO-network
+rates and these carry evidence of an HMO-only contract. MIXED (a proven PPO sign plus an HMO sign) stays, flagged.
 
 **Context a contracting team should know.** Health Net has announced it is leaving California's commercial group
 market, with in-force group coverage ending around February–March 2027 (Healthcare Finance News). These contracts
@@ -350,6 +370,8 @@ primary-contract choice and contract count.
 | Source | Used for |
 |---|---|
 | Centene price transparency page: https://www.centene.com/price-transparency-files.html | the index files (C1) |
+| California Dept. of Public Health, Licensed and Certified Healthcare Facility Listing (data date 2026-10-16): https://data.chhs.ca.gov/dataset/healthcare-facility-locations | C5: state licensing address of facilities, matched by NPI (4th independent source family) and referee of the tier-accuracy audit |
+| CMS Provider Data Catalog: MIPS Overall Performance PY2024 (a174-a962), Hospital General Information (xubh-q36u): https://data.cms.gov/provider-data/ | C7: quality (MIPS score, hospital stars) for the value label |
 | CMS 2026 Physician Fee Schedule RVU file, October release (RVUs, CA GPCIs, locality–county map): https://www.cms.gov/files/zip/rvu26d.zip | C4 step 7: Medicare price of every professional rate for the provider's own CA locality; C7 Medicare-normalised index |
 | CMS OPPS Addendum B, October 2026 quarterly update: https://www.cms.gov/files/zip/october-2026-opps-addendum-b.zip | C4 step 7: Medicare outpatient-hospital price for facility rates |
 | CMS 2025 PFS RVU file (October): https://www.cms.gov/files/zip/rvu25d.zip | C4 step 7: data-currency test only (Health Net fits 2026, not 2025) |

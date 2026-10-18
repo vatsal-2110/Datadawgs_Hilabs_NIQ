@@ -24,6 +24,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import ijson
+import pandas as pd
 
 from src.common.normalize import ROOT, load_config, norm_npi, norm_tin
 
@@ -291,12 +292,18 @@ def to_text(name: str, prof: dict) -> str:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--file", default="data/raw/rates/2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json")
-    ap.add_argument("--name", default="healthnet-ca_in-network")
+    ap.add_argument("--file", default=None, help="rate file to profile (default: the in-scope in-network file from C1)")
+    ap.add_argument("--name", default=None)
     ap.add_argument("--npi-sample-every", type=int, default=1,
                     help="run the (NPI,TIN)-level deciding test on 1 in N billing codes (default 1 = all)")
-    args = ap.parse_args(argv)
+    # parse_known_args: when called from src.run_all, run_all's own flags (e.g. --from) are not ours
+    args, _ = ap.parse_known_args(argv if argv is not None else [])
     cfg = load_config()
+    if args.file is None:          # default = what C1 found, never a fixed file name
+        f = pd.read_parquet(cfg["paths"]["stage1"] / "files.parquet")
+        fn = f[f.in_scope & f.file_role.eq("in_network")].file_name.iloc[0]
+        args.file = str((cfg["paths"]["raw_rates"] / fn).relative_to(ROOT))
+        args.name = args.name or fn.split("_", 2)[-1].replace(".json", "")
     path = ROOT / args.file
     out = cfg["paths"]["stage2"]
     out.mkdir(parents=True, exist_ok=True)

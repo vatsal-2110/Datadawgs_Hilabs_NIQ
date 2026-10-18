@@ -73,6 +73,9 @@ ratefile:          ## C6: final Excel rate file
 cost:              ## C7: cost effectiveness
 	$(PY) -m src.stage7_cost_effectiveness
 
+deliverables:      ## copy the PS deliverables into deliverables/
+	$(PY) -m src.export_deliverables
+
 summary:           ## deliverable 4: summary file
 	$(PY) -m src.summary
 

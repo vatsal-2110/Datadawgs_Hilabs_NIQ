@@ -172,13 +172,18 @@ scores `M1_code_coverage` … `M7_id_validity` (0–100) and `overall_score`. De
 | address_1, address_2, city, state, zip, std_address, addr_id | raw and standardized parts; addr_id = building identity |
 | lat, lon, county_fips5, tract | from the Census geocoder |
 | tier | VERIFIED / PROBABLE / UNVERIFIED / NONE (rules: `docs/logic_address_mapping.md`) |
-| sources | e.g. `DAC\|NPPES_LOC`, `NPPES_LOC\|DAC_GROUP`, `NPPES_LOC\|REGISTRY:CMS_HOSPITAL`, `NPPES_ENDPOINT` |
-| n_independent_sources | families agreeing: NPPES, CMS enrolment (DAC), CMS facility registry |
+| sources | e.g. `DAC\|NPPES_LOC`, `NPPES_LOC\|DAC_GROUP`, `NPPES_LOC\|REGISTRY:CMS_HOSPITAL`, `CDPH\|NPPES_LOC`, `NPPES_ENDPOINT` |
+| n_independent_sources | families agreeing: NPPES, CMS enrolment (DAC), CMS facility registry, CDPH state licence |
+| expected_accuracy | measured share of this tier's best addresses that match the CDPH state licence, on a mapping built without CDPH (hold-out audit, logic §3.6): VERIFIED 0.975, UNVERIFIED 0.86, PROBABLE blank, NONE 0 |
+| address_exists_by | CENSUS_GEOCODER or GOVERNMENT_RECORD (a non-NPPES government source lists the same building; logic D5.10); blank = existence not proven |
 | tin_corroboration, npis_on_tin_at_addr | other NPIs of the same TIN report this address in their own records |
 | dac_name_match, registry_match, geocoded, in_state | evidence flags |
 | nppes_current | NPPES updated within 24 months of the newest record: reported only, never raises a tier (logic 3.1) |
 | is_po_box | PO box: never VERIFIED or PROBABLE |
 | points, rank_in_pair, is_best | ranking inside the pair |
+
+`data/stage5/c5_cdph_audit.parquet`: every hold-out address refereed by CDPH: npi, tin, addr_id, tier, is_best,
+same_building (same street+ZIP5 or within 250 m), same_zip.
 
 `data/stage5/c5_audit.json` / `.txt` (`python -m src.stage5_audit`): A recency test, B source triangulation,
 C NPPES-only baseline vs pipeline (feeds `summary.json → address_baseline_vs_pipeline`).
@@ -192,6 +197,7 @@ One row per NPI × TIN × Address × Billing Code. Columns: **NPI, TIN, Address,
 npi_type, item_name, billing_code_type, place_of_service, modifier, n_rate_variants, variant_rate_min, variant_rate_max,
 address_tier, city, state, zip, county_fips5, lat, lon, spec_cd, specialty_source, code_in_specialty_list, network_hint,
 in_capitation_code, sources, evidence. Rate rule: `docs/logic_rate_file_c6_c7.md` D6.1.
+Sheets: Summary, Rate File, Rate Variants, Estimated Rates, Read Me. Rate File columns added 2026-10-18: `specialty_source` now includes CODE_DEFAULT (provider has no HiLabs specialty: HiLabs specialty that owns the billing code), `provider_taxonomy` (provider's own NPPES taxonomy), `address_expected_accuracy`, `trust_score` / `trust_band` / `trust_detail`, `pct_of_medicare`, `rate_check`, `contract_multiplier_pct`.
 
 ## Stage 7 — cost effectiveness (`python -m src.stage7_cost_effectiveness`)
 `data/stage7/provider_cost_effectiveness.parquet` (+ `.csv`): NPI, TIN, specialty, spec_cd, county, n_codes_compared,

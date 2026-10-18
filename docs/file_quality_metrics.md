@@ -1,82 +1,113 @@
 # File quality metrics (C3)
 
-**Goal.** Tell a contracting team how far it can trust a price-transparency (PTD) in-network file before using its
-rates. A file is "good" if it (1) prices the services that matter, (2) names the providers who deliver them,
-(3) gives valid, comparable dollar amounts, (4) has no duplicate or contradictory prices, (5) is current, and
-(6) uses valid identifiers.
+**Goal.** Tell a contracting team how far it can trust each price-transparency (PTD) file before using it. The PS asks
+to "score every file you use", so every file type the pipeline reads is graded, each on **its own job**:
 
-**Which files.** The PS asks to "score every file you use". We use one in-network file (Health Net CA, the PPO
-network's only rate file). A lone score is hard to read, so we also grade two files from the **same payer and same
-format** as peers: Health Net Oregon (group) and Ambetter California (individual marketplace).
-
-**How.** `python -m src.stage3_grade_files`. Each file is streamed with `ijson` (never loaded whole), and the files are
-graded in parallel processes. Results: `data/stage3/file_scores.csv`, `data/stage3/c3_report.txt`.
-
----
-
-## The seven scored metrics
-Each metric is a percentage (0–100, higher = better). Overall = weighted mean.
-
-| # | Metric | Calculation | Why it matters | Weight |
-|---|---|---|---|---|
-| M1 | **Code coverage** | Σ HiLabs weight of codes with ≥1 positive dollar price (including facility prices filed under a revenue code that name the CPT/HCPCS code in `additional_information`) ÷ Σ HiLabs weight of all 583 codes (sheet "Spec-Proc Weights") | A file is only useful for benchmarking if it prices the services that matter. Weighting by HiLabs' own weights means missing a high-volume code (99214) costs more than missing a rare one. Count-based coverage is reported too | **25** |
-| M2 | **Provider detail** | Share of NPIs that are individuals (NPPES Type 1), from a fixed random sample of 200 NPIs per file (seed 7), looked up in the NPPES API | Rates are compared clinician by clinician. A file listing only organization NPIs hides who delivers care, so rates can't be tied to a specialty or practice address (the problem Member B found: UC Regents appears with a few NPIs, Medicare lists thousands) | **15** |
-| M3 | **Rate validity** | 100 − % prices ≤ $0 or missing − % robust outliers. Outlier = modified z-score > 3.5 (Iglewicz & Hoaglin: 0.6745·(x − median)/MAD) within the same service (code, item, billing class, place of service, modifier, sub-code, rate type), groups ≥ 10 prices | $0 and extreme values distort medians and benchmarks. Median/MAD resists the outliers it is looking for; grouping by service avoids flagging legitimately different services | **15** |
-| M4 | **Usable rate types** | % prices whose `negotiated_type` is a dollar amount (negotiated, fee schedule, derived) | Percentage-of-charges and per-diem rates can't be compared with fee-for-service dollars without extra data | **10** |
-| M5 | **Uniqueness** | 100 − % exact duplicate price entries (same provider group, service, rate) − % conflicting prices (same provider group and service, more than one distinct rate) | Duplicates inflate counts; conflicts force an arbitrary pick, i.e. uncertainty in the extracted rate | **10** |
-| M6 | **Freshness** | 100 if `last_updated_on` ≤ 31 days before the run date; then linear down to 0 at 365 days | The Transparency-in-Coverage rule requires files to be updated monthly; older files risk stale contracts | **10** |
-| M7 | **ID validity** | mean(% NPI entries passing the NPI check digit (Luhn over "80840" + 9 digits), % TIN entries with 9 digits) | Invalid IDs break the join to NPPES, CMS and addresses (C5) and hint at careless file generation | **15** |
-
-**Why these weights.** Coverage (M1 + M2 = 40) comes first, because a clean file that misses the services or the
-clinicians can't be used for contracting. Validity and identifiers (M3 + M7 = 30) come next, because they decide
-whether the rates can be trusted and linked. Rate type, uniqueness and freshness (30) matter, but each is narrower.
-The weights are in one dictionary (`WEIGHTS` in `src/stage3_grade_files.py`), so a team can re-weight without
-touching the metric code.
-
-### Reported but not scored (and why)
-| Indicator | Why not scored |
-|---|---|
-| `network_name` filled % | Optional in practice; we report it because it decides whether networks can be separated *inside* a file (C2) |
-| Expiry-date informativeness (% not 9999-12-31) | 0% in all three files, so it can't separate files; "staleness of contracts" can't be measured from dates here, only file freshness (M6) |
-| Institutional share, capitation items | Describe the file's content mix, not its quality |
-
----
-
-## Results (run 2026-10-17)
-
-| File | Role | **Overall** | M1 code cov. | M2 provider detail | M3 validity | M4 types | M5 unique | M6 fresh | M7 IDs |
-|---|---|---|---|---|---|---|---|---|---|
-| Health Net CA in-network | **used** | **81.0** | 75.6 | 20.1 | 94.3 | 100 | 98.8 | 100 | 99.96 |
-| Health Net OR in-network | comparison | 72.7 | 52.2 | 8.5 | 89.1 | 100 | 99.95 | 100 | 100 |
-| Ambetter CA in-network | comparison | 94.6 | 86.1 | 98.5 | 93.0 | 99.99 | 93.4 | 100 | 100 |
-
-Raw values behind the scores:
-
-| | Health Net CA | Health Net OR | Ambetter CA |
+| File type | Files we use | Its job | Comparison peer (same payer, same state) |
 |---|---|---|---|
-| last_updated_on (age) | 2026-10-06 (11 d) | 2026-10-06 (11 d) | 2026-09-28 (19 d) |
-| NPIs / TINs | 3,734 / 2,888 | 412 / 229 | 74,031 / 12,072 |
-| Items / prices | 1,717 / 1,500,288 | 337 / 18,468 | 4,360 / 247,890 |
-| HiLabs codes priced (count) | 134/583 (23.0%) | 52/583 (8.9%) | 382/583 (65.5%) |
-| Type 1 share (sample n) | 20.1% (199) | 8.5% (199) | 98.5% (199) |
-| $0 rates / outliers | 0% / 5.68% | 0% / 10.87% | 0% / 7.00% |
-| Duplicate entries / conflicts | 0.85% / 0.32% | 0% / 0.05% | 6.63% / 0.03% |
-| NPI check digit OK / TIN 9 digits | 99.91% / 100% | 100% / 100% | 99.99% / 100% |
-| network_name filled | 0% | 0% | 100% (all "Exchange CA") |
-| Institutional share | 99.7% | 97.9% | 81.1% |
+| In-network rate file | Health Net CA in-network (the PPO network's only rate file, C2) | prices agreed with providers | Ambetter CA in-network |
+| Allowed-amounts file | Health Net CA allowed-amounts (used in C4 as network evidence and benchmark) | what was paid to out-of-network providers | Ambetter CA allowed-amounts |
+| Index files | all 11 Centene index files (C1) | the table of contents: plans → price files | each other |
 
-### What the grades say about the file we use (Health Net CA)
-- **Strong:** current (11 days old), all dollar rates, no $0 rates, valid IDs, few duplicates or conflicts.
-- **Weak:** **provider detail (20.1)**. About 80% of its NPIs are organizations, so individual clinicians are under-represented.
-  **Code coverage is partial (75.6% by weight, 34.8% by count)**. 99.7% of its prices are facility prices filed under
-  revenue codes; decoding the CPT/HCPCS code each carries adds 69 HiLabs codes (68.8% → 75.6%) that are priced only at
-  facility level.
-- **Compared with Ambetter CA** (same payer, same state, marketplace): Ambetter lists 20× more NPIs, almost all individuals,
-  and prices 382 HiLabs codes. So the Health Net CA gaps are a property of that file, not of Centene's format.
-- **Implication for the rate file:** results are reliable for the providers and codes present, but the PPO network
-  is under-represented at clinician level. The summary reports this next to the coverage numbers.
+Peers are California files of the same payer, so differences come from the file, not from the market or the state
+(Health Net Oregon was used as a peer earlier and was dropped for that reason).
+
+**How.** `python -m src.stage3_scorecard` (run by `src.run_all` as stage `c3score`). Files are streamed with `ijson`
+and graded in parallel processes. Every threshold is in `config.yaml → grading.scorecard`; field rules follow the
+official CMS Transparency-in-Coverage schemas. Output: `data/stage3/scorecard_{in_network,allowed,index}.csv`,
+`data/stage3/scorecard_report.txt`. Every metric is 0–100 (higher = better); overall = weighted mean, then the Trust Gate.
+
+---
+
+## 1. In-network rate files (prices agreed with providers). Unit: price record
+
+| Metric | Simple question | How it is calculated | Why it matters | Weight |
+|---|---|---|---|---|
+| **Usable price share** (Contract-Ready Rate Yield) | Out of all the prices we need, how many can we actually use? | % of HiLabs-code services (provider group × service) that are usable: **one** distinct price, plausible (inside the Medicare band when Medicare prices the code, and not a robust peer outlier), and the provider group lists ≥ 1 valid NPI | The single number a contracting team cares about: how much of the file can go straight into a rate benchmark | **30** |
+| **Makes sense vs Medicare** (Medicare Reality Check) | Is the price in a normal range compared with what Medicare pays for the same service? | % of benchmarkable professional HiLabs prices between 30% and 1,000% of the 2026 Medicare Physician Fee Schedule (CA median geographic factors, same rule as C4 `rate_check`); coverage reported | An outside, payer-independent yardstick: catches typos, unit errors and placeholder prices that internal checks can't see | **20** |
+| **Complete price list per provider** (Specialty Fee-Schedule Depth) | Does each provider have prices for the main services of its own specialty? | per NPI with a HiLabs specialty: share of that specialty's top-10 HiLabs codes (by weight) it is priced on, averaged over NPIs | A file can price many codes in total yet give each provider only one or two, which makes provider-level comparison impossible | **20** |
+| **One clear price** (Single-Price Certainty) | Does each provider have one price per service, or several conflicting ones? | % of (provider group, service) combinations, all codes, with exactly one distinct price | Several prices for one service force an arbitrary choice (C4) and signal uncertainty | **15** |
+| **Data makes sense together** (Field Coherence) | Do the code, the type of bill and the place of service match each other? | % of prices whose code type, billing class, place of service, modifier, arrangement and rate type follow the CMS schema and agree (e.g. revenue codes are institutional; 26/TC modifiers are professional) | Contradictory fields mean the price can't be read reliably | **5** |
+| **Fake filling** (Filler-Free Score) | How many fields hold dummy values? Fewer = better | 100 − % of checked fields with filler: empty `network_name` (required by the schema), NPI 0 or failing the check digit, TIN not 9 digits or one repeated digit | Filler looks like data but carries none; it breaks joins and network separation. `9999-12-31` expiry is **not** counted: the CMS schema prescribes it for open-ended contracts | **5** |
+| **Ghost providers** (Live Provider Rate) | How many listed providers are missing from NPPES or stale? Fewer = better | % of NPIs found in NPPES and updated within 5 years (all NPIs up to 5,000, else a fixed sample of 200) | Rates for deactivated or long-silent providers are contracts nobody can use | **5** |
+
+## 2. Allowed-amounts files (what was paid to out-of-network providers). Unit: payment record
+
+Codes with fewer than 20 claims may legally be omitted, so there is no coverage metric.
+
+| Metric | Simple question | How it is calculated | Why it matters | Weight |
+|---|---|---|---|---|
+| **Usable payment share** (Usable Payment Yield) | Out of all payment records, how many can we actually use? | % of records that are schema-complete, coherent, allowed ≤ billed, inside the Medicare band when benchmarkable, with ≥ 1 valid NPI | The share that can serve as an out-of-network benchmark | **30** |
+| **Paid vs billed makes sense** (Paid-to-Billed Realism) | Is the amount paid a sensible part of what the provider billed? | % of records with allowed ÷ billed between 0.05 and 1.0 | A payment above the bill, or a token share, means the record is wrong or misattributed | **25** |
+| **Makes sense vs Medicare** | Is the payment in a normal range compared with Medicare? | % of benchmarkable professional payments between 30% and 1,000% of Medicare | Same outside yardstick as for in-network | **15** |
+| **Matches network prices** (In-Network Anchoring) | For the same service, is the out-of-network payment close to the in-network price? | % of records within 0.5×–5× the same payer's in-network median for the same code and billing class | Out-of-network payments far from the payer's own contracts suggest whole-claim totals or errors | **10** |
+| **Data makes sense together** (Field Coherence) | Are codes filed under the right type (e.g. revenue codes as institutional)? | code type and billing class allowed, revenue codes institutional, professional rows carry a place of service, TIN type ein/npi | Wrong types make records unreadable | **10** |
+| **Required fields filled** (Schema Completeness) | Are all compulsory fields present? | % of records with every field the CMS allowed-amounts schema requires | Missing required fields = unusable record | **5** |
+| **Fake filling** (Filler-Free Score) | Fields filled with dummy values? Fewer = better | 100 − % filler: NPI 0 / bad check digit, placeholder TIN, token billed charge (≤ $1) | As for in-network | **5** |
+
+## 3. Index files (the table of contents). Unit: plan row
+
+| Metric | Simple question | How it is calculated | Why it matters | Weight |
+|---|---|---|---|---|
+| **Prices can be reached** (Price Reachability) | For each plan, does the link to its price file actually work? | % of plan rows whose in-network file link(s) answer HTTP 200 (HEAD request, cached) | An index that points to dead files makes its plans' prices unavailable | **35** |
+| **Correct plan IDs** (Plan ID Integrity) | Are plan IDs real and labelled correctly? | % of plan rows whose `plan_id` follows the CMS rule for its `plan_id_type` (EIN 9 digits; HIOS 10 or 5 characters; placeholders such as 999999999 never valid) | Plan IDs are the join key to employers, regulators and products (C1, C2) | **25** |
+| **Clear plan-to-file links** (Plan-to-File Clarity) | Does each plan point to one clear set of price files? | % of distinct plans (brand + normalized name + ID + market) mapped to exactly one set of in-network files | A plan listed with different file sets is ambiguous about which prices apply | **15** |
+| **Fake filling** (Filler-Free Score) | Dummy IDs, repeated rows, or identical copied files? | 100 − % rows with placeholder IDs, exact duplicates, or from a byte-identical index file | Copies and placeholders inflate the plan count | **10** |
+| **Required fields filled** (Schema Completeness) | Are all compulsory fields present? | every field the CMS table-of-contents schema requires (plan name, ID, ID type, market type, issuer; sponsor for EIN plans) | Missing fields block scope decisions (C1) | **10** |
+| **Up to date** (Freshness) | Updated in the last month? | 100 if ≤ 31 days old, then linear to 0 at 365 days | The rule requires monthly updates | **5** |
+
+## Trust Gate (all file types)
+A file older than 90 days, or a rate / allowed-amounts file with fewer than 95% valid NPIs, is capped at 50 overall,
+however well it scores elsewhere: a stale or unidentifiable file must never look trustworthy.
+
+**Why these weights.** In every file type the biggest weight goes to "can we use it": usable price share, usable
+payment share, prices can be reached. External reality checks come next (Medicare, paid vs billed, plan IDs), then
+completeness per provider and clarity. Hygiene metrics (coherence, filler, freshness) carry small weights: they rarely
+separate files on their own, and the Trust Gate already handles the extreme cases.
+
+---
+
+## Results (this run; regenerated in `docs/summary.md` on every run)
+
+**In-network**
+
+| File | Role | **Overall** | Usable price share | vs Medicare | Price list per provider | One clear price | Coherence | Fake filling | Ghost providers |
+|---|---|---|---|---|---|---|---|---|---|
+| Health Net CA | **used** | **78.0** | 98.3 | 97.8 | **11.3** | 99.7 | 100 | 78.3 | 55.9 |
+| Ambetter CA | comparison | 88.0 | 95.8 | 98.7 | 56.6 | 99.97 | 100 | 99.99 | 63.0 |
+
+**Allowed amounts**
+
+| File | Role | **Overall** | Usable payment share | Paid vs billed | vs Medicare | Matches network prices | Coherence | Required fields | Fake filling |
+|---|---|---|---|---|---|---|---|---|---|
+| Health Net CA | **used** | **40.2** | 18.8 | 34.2 | 34.9 | 32.1 | 76.4 | 100 | 97.8 |
+| Ambetter CA | comparison | 81.3 | 90.5 | 92.2 | 56.1 | 27.6 | 100 | 100 | 99.8 |
+
+**Index files:** Health Net **97.7** (157 invalid plan IDs: HIOS IDs labelled "ein", and 999999999 placeholders) · Ambetter 100 · Fidelis 100 ·
+QualChoice and its 7 sub-indexes **55–65**: none of their price-file links answer (Price Reachability 0), and one
+sub-index is a byte-identical copy of another.
+
+### What the grades say about the files we use
+- **Health Net CA in-network (78.0):** the prices themselves are clean: 98% usable, 98% plausible against Medicare, almost
+  always one price per service. The weakness is **depth per provider (11.3 vs 56.6 for Ambetter)**: each provider is
+  priced on few of its specialty's main codes, because 99.7% of the file is facility pricing and ~80% of its NPIs are
+  organizations. Every `network_name` is empty (the main filler), which is why networks can't be separated inside the
+  file (C2). 44% of its NPIs have not updated NPPES in 5 years.
+- **Health Net CA allowed-amounts (40.2):** most payment records are not usable as unit prices: allowed amounts are
+  often whole-claim totals (e.g. venipuncture 36415 at $857) and far from billed charges. C4 therefore never mixes them
+  into rates and uses them only as network evidence and a benchmark.
+- **Index files:** Health Net's index is reliable; QualChoice's links are dead, so its plans' prices can't be reached.
+
+### Cross-check: an earlier 7-metric grader (`src.stage3_grade_files`, stage `c3`)
+Kept as an independent second opinion on the in-network file. It scores code coverage by HiLabs weight (25), share of
+individual NPIs (15), $0 / outlier rates (15), dollar rate types (10), duplicates and conflicts (10), freshness (10),
+NPI check digit and TIN validity (15): Health Net CA **81.0** vs Ambetter CA **94.6**. Both graders rank the files the
+same way and point to the same weakness (provider-level detail). The scorecard above is the official C3 because it
+grades **every** file type we use, including allowed-amounts and index files.
 
 ### Limitations
-- M2 uses a 200-NPI sample per file (fixed seed, reproducible): about ±5.5 points at 95% confidence near 20%.
-- M3's outlier test flags statistical extremes, not errors; some outliers are legitimate (e.g. complex cases).
-- Weights are a judgment, made explicit and adjustable; the raw metrics are always published next to the score.
+- Medicare benchmarks only professional codes on the Physician Fee Schedule (3.3% of Health Net's HiLabs prices,
+  because most are facility prices); coverage is reported next to the score.
+- Peer outliers are statistical extremes, not proven errors.
+- Weights are a judgment, made explicit and adjustable (`W_IN`, `W_AA`, `W_IX` in `src/stage3_scorecard.py`); the raw
+  metrics are always published next to the score.

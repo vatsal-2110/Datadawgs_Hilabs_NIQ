@@ -47,7 +47,15 @@ def main():
         "ppo_plans_incl_epo_on_inferred_ppo_network": int(labels.uses_ppo_network_incl_inferred.sum()),
         "plans_ruled_out": labels[~labels.is_ppo].product_type.value_counts().to_dict(),
         "ppo_rate_files": files[files.in_scope & (files.file_role == "in_network")].file_name.tolist(),
-        "file_quality_scores": scores[["file_name", "role", "overall_score"]].to_dict("records"),
+        # official C3 = scorecard (every file type we use); the 7-metric grader is kept as a cross-check
+        "file_quality_scores": {k: pd.read_parquet(P["stage3"] / f"scorecard_{k}.parquet")
+                                [[c for c in ("file_name", "index_name", "role", "overall_score")
+                                  if c in pd.read_parquet(P["stage3"] / f"scorecard_{k}.parquet").columns]]
+                                .to_dict("records")
+                                for k in ("in_network", "allowed", "index")
+                                if (P["stage3"] / f"scorecard_{k}.parquet").exists()},
+        "file_quality_crosscheck_7_metric_grader": scores[["file_name", "role", "overall_score"]].to_dict("records"),
+        "rate_file_specialty_sources": rf.specialty_source.value_counts().to_dict(),
         "providers_in_ppo_file": {"npi_tin_pairs": int(len(pairs)), "unique_npis": int(len(npis)),
                                   "unique_tins": int(len(tins))},
         "rates_extracted": {"rate_rows": int(len(rates)), "billing_codes": int(rates.billing_code.nunique()),
@@ -131,9 +139,18 @@ def main():
         md += [f"| PPO-network evidence per provider pair (C2) | "
                + ", ".join(f"{k} {v:,}" for k, v in S["ppo_network_evidence_pairs"].items())
                + " (rules: `docs/logic_ppo_network.md` §4.1) |"]
-    md += ["", "## File quality scores (C3)", "", "| File | Role | Overall (0-100) |", "|---|---|---|"]
-    md += [f"| {s['file_name']} | {s['role']} | {s['overall_score']} |" for s in S["file_quality_scores"]]
-    md += ["", "## Specialty sources", "", ", ".join(f"{k}: {v:,}" for k, v in S["specialty_sources"].items())]
+    md += ["", "## File quality scores (C3 scorecard, `docs/file_quality_metrics.md`)", "",
+           "| File type | File | Role | Overall (0-100) |", "|---|---|---|---|"]
+    for k, rows in S["file_quality_scores"].items():
+        md += [f"| {k} | {r.get('file_name') or r.get('index_name')} | {r.get('role', 'index')} | {r['overall_score']} |"
+               for r in rows]
+    md += ["", "Cross-check (7-metric grader, in-network only): " + "; ".join(
+        f"{r['file_name']} {r['overall_score']}" for r in S["file_quality_crosscheck_7_metric_grader"])]
+    md += ["", "## Specialty", "",
+           "Rate file rows by specialty source (every row has a HiLabs specialty): "
+           + ", ".join(f"{k}: {v:,}" for k, v in S["rate_file_specialty_sources"].items()),
+           "", f"Per NPI ({len(spec):,} in the file, before the row-level CODE_DEFAULT): "
+           + ", ".join(f"{k}: {v:,}" for k, v in S["specialty_sources"].items())]
     if S["cost_effectiveness_labels"]:
         md += ["", "## Cost effectiveness (C7)", "", ", ".join(f"{k}: {v:,}" for k, v in S["cost_effectiveness_labels"].items())]
     (ROOT / "docs" / "summary.md").write_text("\n".join(md) + "\n", encoding="utf-8")

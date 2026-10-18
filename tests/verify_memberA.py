@@ -191,6 +191,18 @@ def main():
     check("C6 trust_score = sum of its five parts, within 0-100", (parts == rf6.trust_score).all()
           and rf6.trust_score.between(0, 100).all(), str(rf6.trust_band.value_counts().to_dict()))
 
+    # ---------------- C5 state-licensing source and hold-out accuracy audit
+    ad5 = pd.read_parquet(P["stage5"] / "npi_tin_address.parquet")
+    au5 = pd.read_parquet(P["stage5"] / "c5_cdph_audit.parquet")
+    acc5 = au5[au5.is_best].groupby("tier").same_building.mean().round(3)
+    got = ad5[ad5.tier.isin(acc5.index)].groupby("tier").expected_accuracy.first()
+    check("C5: expected_accuracy = hold-out CDPH audit of the tier (built without CDPH)",
+          ((got - acc5.reindex(got.index)).abs() < 1e-9).all() and "CDPH" not in "|".join(au5.columns),
+          str(acc5.to_dict()))
+    cdph_rows = ad5.sources.fillna("").str.contains("CDPH")
+    check("C5: CDPH-sourced addresses count as an independent family",
+          (ad5[cdph_rows].n_independent_sources >= 1).all() and cdph_rows.sum() > 0, f"{int(cdph_rows.sum())} rows")
+
     # ---------------- C3 grades
     sc = pd.read_parquet(P["stage3"] / "file_scores.parquet")
     from src.stage3_grade_files import WEIGHTS
@@ -200,20 +212,38 @@ def main():
     check("C3: overall = weighted mean of metrics", ((recomputed - sc.overall_score).abs() <= 0.06).all())
     check("C3: the used (in-scope) file is graded", (sc.role == "USED (in scope)").sum() == len(ins[ins.file_role == "in_network"]))
 
+    # ---------------- C3 scorecard (official C3): metrics in range, overall = weighted mean (Trust Gate cap)
+    from src.stage3_scorecard import W_AA, W_IN, W_IX
+    cap = cfg["grading"]["scorecard"]["gate_cap"]
+    ok_sc = True
+    for k, W in (("in_network", W_IN), ("allowed", W_AA), ("index", W_IX)):
+        d = pd.read_parquet(P["stage3"] / f"scorecard_{k}.parquet")
+        raw = (d[list(W)] * pd.Series(W)).sum(axis=1) / sum(W.values())
+        exp = raw.where(~d.trust_gate_failed.astype(bool), raw.clip(upper=cap))
+        ok_sc &= bool(((d[list(W)] >= 0) & (d[list(W)] <= 100)).all().all() and ((exp - d.overall_score).abs() <= 0.06).all())
+    check("C3 scorecard: every metric in [0,100]; overall = weighted mean with the Trust Gate, for all 3 file types", ok_sc)
+    ins_files = set(ins.file_name)
+    graded = set(pd.read_parquet(P["stage3"] / "scorecard_in_network.parquet").file_name) |         set(pd.read_parquet(P["stage3"] / "scorecard_allowed.parquet").file_name)
+    check("C3 scorecard: every file we use is graded (in-scope in-network + allowed-amounts, all index files)",
+          ins_files <= graded and len(pd.read_parquet(P["stage3"] / "scorecard_index.parquet")) == len(cfg["index_files"]))
+
     # ---------------- C5 address tiers follow the written rules
     ad = pd.read_parquet(P["stage5"] / "npi_tin_address.parquet")
     a = ad[ad.tier != "NONE"]
-    ver_rule = a.geocoded.astype(bool) & ((a.n_independent_sources >= 2) | ((a.n_independent_sources == 1)
+    exists = a.address_exists_by.fillna("").ne("")
+    ver_rule = exists & ((a.n_independent_sources >= 2) | ((a.n_independent_sources == 1)
                                           & (a.tin_corroboration.astype(bool) | a.dac_name_match.astype(bool))))
     check("C5: every VERIFIED row satisfies the VERIFIED rule", ver_rule[a.tier == "VERIFIED"].all())
     check("C5: every row satisfying the VERIFIED rule is VERIFIED (PO boxes excluded)",
           (a[ver_rule & ~a.is_po_box.astype(bool)].tier == "VERIFIED").all())
-    pro_rule = a.geocoded.astype(bool) & (a.sources.str.contains("DAC") | a.registry_match.fillna("").ne("")) & ~ver_rule
-    check("C5: every PROBABLE row has a geocoded non-NPPES source (DAC or CMS registry)",
+    pro_rule = exists & (a.sources.str.contains("DAC|CDPH") | a.registry_match.fillna("").ne("")) & ~ver_rule
+    check("C5: every PROBABLE row has a geocoded non-NPPES source (DAC, CMS registry or CDPH)",
           pro_rule[a.tier == "PROBABLE"].all())
     check("C5: NPPES-only addresses are never above UNVERIFIED (update age is not evidence, audit A)",
-          (a[~a.sources.str.contains(r"DAC|REGISTRY", regex=True) & ~a.tin_corroboration.astype(bool)]
+          (a[~a.sources.str.contains(r"DAC|REGISTRY|CDPH", regex=True) & ~a.tin_corroboration.astype(bool)]
            .tier == "UNVERIFIED").all())
+    check("C5: an address exists by the Census geocoder or a non-NPPES government record (never NPPES alone)",
+          (a[exists & ~a.geocoded.astype(bool)].sources.str.contains("DAC|CDPH|REGISTRY", regex=True)).all())
     check("C5: no PO box is VERIFIED or PROBABLE", not (a.is_po_box.astype(bool) & a.tier.isin(["VERIFIED", "PROBABLE"])).any())
     check("C5: no address is supported only by DAC_GROUP (confirmation-only source)",
           not a.sources.str.fullmatch(r"DAC_GROUP(\|REGISTRY:.*)?").any())
@@ -247,13 +277,25 @@ def main():
           not (pe[pe.ppo_network_evidence == "PPO_CONFIRMED"][["c_capitation", "h_hmo_label"]].any(axis=1)).any()
           and not (pe[pe.ppo_network_evidence == "HMO_SIGNAL"][["g_non_hmo_county", "l_ppo_label"]].any(axis=1)).any())
 
+    _sp = pd.read_excel(P["hilabs_xlsx"], sheet_name="Spec-Proc Weights", dtype=str)
+    _sp["w"] = _sp.SPEC_PROC_WEIGHT.astype(float)
+    top_spec = _sp.sort_values("w", ascending=False).drop_duplicates("PROC_CD").set_index("PROC_CD").SPEC_CD.to_dict()
+    cd_ = rf[rf.specialty_source.eq("CODE_DEFAULT")]
+    check("C6: every row has a HiLabs specialty; CODE_DEFAULT = the code's top-weight HiLabs specialty",
+          rf.spec_cd.notna().all() and (cd_.spec_cd == cd_["Billing Code"].map(top_spec)).all(),
+          str(rf.specialty_source.value_counts().to_dict()))
     check("C6: required columns first", list(rf.columns[:6]) == ["NPI", "TIN", "Address", "Billing Code", "Specialty", "Rate"])
     check("C6: unique NPI x TIN x Address x Billing Code",
           not rf.fillna({"NPI": "", "Address": ""}).duplicated(["NPI", "TIN", "Address", "Billing Code"]).any(), f"{len(rf):,} rows")
     k = ["npi", "tin", "billing_code"]
-    check("C6: every extracted (NPI,TIN,code) reaches the rate file",
+    exh = pd.read_parquet(P["stage6"] / "provider_rate_file_excluded_hmo.parquet")
+    both6 = pd.concat([rf, exh])
+    check("C6: every extracted (NPI,TIN,code) reaches the rate file or the HMO-excluded sheet",
           set(map(tuple, rates[k].fillna("").drop_duplicates().values))
-          == set(map(tuple, rf[["NPI", "TIN", "Billing Code"]].fillna("").drop_duplicates().values)))
+          == set(map(tuple, both6[["NPI", "TIN", "Billing Code"]].fillna("").drop_duplicates().values)))
+    check("C6: Rate File is PPO network only (no HMO_SIGNAL); every excluded row is HMO_SIGNAL with a reason",
+          not rf.ppo_network_evidence.eq("HMO_SIGNAL").any() and exh.ppo_network_evidence.eq("HMO_SIGNAL").all()
+          and exh.exclusion_reason.str.len().gt(12).all(), f"{len(rf):,} PPO rows, {len(exh):,} excluded")
     r2 = rates.assign(_n=rates.npi.fillna(""))
     own = r2.groupby(["_n", "tin"]).component.agg(lambda s: s.value_counts().idxmax()).rename("own").reset_index()
     r2 = r2.merge(own, on=["_n", "tin"])
@@ -267,12 +309,12 @@ def main():
     r2["pref"] += r2.m.isna().astype(int)
     exp = r2[r2.pref == r2.groupby(["_n", "tin", "billing_code"]).pref.transform("min")] \
         .groupby(["_n", "tin", "billing_code"]).rate.median().rename("exp").reset_index()
-    got = rf.assign(_n=rf.NPI.fillna("")).drop_duplicates(["_n", "TIN", "Billing Code"])[["_n", "TIN", "Billing Code", "Rate"]]
+    got = both6.assign(_n=both6.NPI.fillna("")).drop_duplicates(["_n", "TIN", "Billing Code"])[["_n", "TIN", "Billing Code", "Rate"]]
     mm = exp.merge(got, left_on=["_n", "tin", "billing_code"], right_on=["_n", "TIN", "Billing Code"])
     check("C6: headline Rate = independent recomputation of rule D6.1", len(mm) == len(exp)
           and ((mm.exp - mm.Rate).abs() < 1e-9).all(), f"{len(mm):,} combinations")
     xl = pd.ExcelFile(P["stage6"] / "provider_rate_file.xlsx")
-    check("C6: Excel has the 4 sheets and all rows", set(xl.sheet_names) == {"Rate File", "Rate Variants", "Estimated Rates", "Read Me"}
+    check("C6: Excel has the 6 sheets and all rows", set(xl.sheet_names) == {"Summary", "Rate File", "Rate Variants", "Estimated Rates", "Excluded - HMO signals", "Read Me"}
           and len(pd.read_excel(xl, "Rate File", usecols=[0])) == len(rf))
 
     # ---------------- C7 labels follow thresholds
@@ -282,6 +324,18 @@ def main():
     lab[(ce.weighted_cost_index >= 1.10) & (ce.pct_codes_below_median <= 0.40)] = "HIGH_COST"
     lab[ce.n_codes_compared < 1] = "INSUFFICIENT_DATA"
     check("C7: labels follow the stated thresholds", (lab == ce.label).all(), f"{len(ce):,} providers")
+    q_ = ce.quality_good.astype("boolean")
+    low_ = ce.weighted_cost_index <= 1.0
+    exp_v = pd.Series("PRICE_ONLY", index=ce.index)
+    exp_v[q_.notna() & low_ & q_.fillna(False)] = "HIGH_VALUE"
+    exp_v[q_.notna() & low_ & ~q_.fillna(True)] = "LOW_PRICE_LOW_QUALITY"
+    exp_v[q_.notna() & ~low_ & q_.fillna(False)] = "HIGH_PRICE_HIGH_QUALITY"
+    exp_v[q_.notna() & ~low_ & ~q_.fillna(True)] = "LOW_VALUE"
+    check("C7: value_label = price vs peers x CMS quality; PRICE_ONLY exactly where no CMS quality",
+          (exp_v == ce.value_label).all() and (ce.quality_basis.eq("NONE") == ce.value_label.eq("PRICE_ONLY")).all(),
+          str(ce.value_label.value_counts().to_dict()))
+    check("C7: only PPO-network providers scored (no HMO-excluded provider)",
+          not set(zip(ce.NPI, ce.TIN)) & set(zip(exh.NPI, exh.TIN)), f"{len(ce):,} providers")
 
     # ---------------- summary matches outputs
     S = json.load(open(P["raw"].parents[0] / "summary.json", encoding="utf-8"))

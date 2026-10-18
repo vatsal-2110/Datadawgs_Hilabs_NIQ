@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from src.common.normalize import load_config, save_csv
-from src.stage4_medicare_benchmark import load_pfs
+from src.stage4_medicare_benchmark import cms_paths, load_pfs
 
 TOL, MIN_ACCURACY = 0.01, 0.70
 TERM_COLS = ["contract_multiplier_pct", "fits_contract_formula"]
@@ -112,10 +112,11 @@ def main():
     base = std.groupby("billing_code").rate.transform("median")
     b_err = (base / std.rate - 1).abs()
     acc["ships"] = acc.within_5pct >= MIN_ACCURACY
+    acc.assign(baseline_within_5pct=None).to_parquet(P["stage4"] / "contract_terms_validation.parquet", index=False)
     ship = {(s, c) for s, c, ok in zip(acc.source, acc.cls, acc.ships) if ok}
 
     # ---- 2 estimated rates for HiLabs codes of the provider's specialty not priced for it
-    pfs, gp, _ = load_pfs(P["cms_pfs"] / "rvu26d.zip")
+    pfs, gp, _ = load_pfs(cms_paths(cfg)["pfs"])
     pf = pfs[pfs["mod"].eq("")].set_index("code")
     loc_name = dict(zip(gp.locality, gp["loc"]))
     G, gmed = gp.set_index("loc"), gp[["g_work", "g_pe", "g_mp"]].median()

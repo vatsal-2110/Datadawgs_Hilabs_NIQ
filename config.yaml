@@ -18,6 +18,8 @@ paths:
   cms_pfs: data/raw/cms_pfs
   cms_pfs_prior: data/raw/cms_pfs_2025
   cms_opps: data/raw/cms_opps
+  cdph: data/raw/cdph
+  deliverables: deliverables       # PS deliverables copied here at the end of every run (committed)
 
 http:
   user_agent: "Mozilla/5.0 (HiLabs-PTD-hackathon pipeline)"
@@ -66,6 +68,16 @@ sources:
     - {id: 4jcv-atw7, label: CMS_ASC,      name: facility_name, npi: npi,                  city: citytown,     state: state,        zip: zip_code}
     - {id: ct36-nrcq, label: CMS_DME,      name: businessname,  address: practiceaddress1, city: practicecity, state: practicestate, zip: practicezip9code, alt_name: practicename}
     - {id: 6jpm-sxkc, label: CMS_HHA,      name: provider_name, address: address,          city: citytown,     state: state,        zip: zip_code}
+    # added 2026-10-18 (CMS Provider Data Catalog, https://data.cms.gov/provider-data/): more organization types
+    - {id: 23ew-n7w9, label: CMS_DIALYSIS, name: facility_name, address: address_line_1,   city: citytown,     state: state,        zip: zip_code}
+    - {id: yc9t-dgbk, label: CMS_HOSPICE,  name: facility_name, address: address_line_1,   city: citytown,     state: state,        zip: zip_code}
+    - {id: 7t8x-u3ir, label: CMS_IRF,      name: provider_name, address: address_line_1,   city: citytown,     state: state,        zip: zip_code}
+    - {id: azum-44iv, label: CMS_LTCH,     name: provider_name, address: address_line_1,   city: citytown,     state: state,        zip: zip_code}
+    - {id: 4pq5-n9py, label: CMS_SNF,      name: provider_name, address: provider_address, city: citytown,     state: state,        zip: zip_code, alt_name: legal_business_name}
+
+  # California Dept. of Public Health, Licensed and Certified Healthcare Facility Listing (C5 source + accuracy referee)
+  # dataset page: https://data.chhs.ca.gov/dataset/healthcare-facility-locations
+  cdph_facility_locations_csv: "https://data.chhs.ca.gov/dataset/3b5b80e8-6b8d-4715-b3c0-2699af6e72e5/resource/f0ae5731-fef8-417f-839d-54a0ed3a126e/download/health_facility_locations.csv"
 
   # CMS Medicare benchmarks for C4 rate plausibility (src.stage4_medicare_benchmark)
   cms_pfs_rvu_zip: "https://www.cms.gov/files/zip/rvu26d.zip"                 # 2026 Physician Fee Schedule RVUs + GPCIs + localities (Oct release)
@@ -107,6 +119,7 @@ evidence:
   # A design whose out-of-pocket max is at or above this value is treated as "at the legal maximum" and matched on
   # copay / deductible / coinsurance only (federal OOP maximums: 2024 $9,450, 2025 $9,200)
   legal_max_oop_floor: 9000
+  plan_document_year: 2026        # year of the Health Net plan documents (broker library) matched in C2
   # Products with no design catalog: the document that defines them (used for every POS / EPO plan)
   product_documents:
     POS:
@@ -190,6 +203,12 @@ grading:
     gate_max_age_days: 90             # Trust Gate: file older than this -> overall capped
     gate_min_npi_valid_pct: 95        # Trust Gate: fewer valid NPIs (check digit) than this -> overall capped
     gate_cap: 50
+
+c7:
+  # quality for C7 value labels (CMS Provider Data Catalog): MIPS overall performance PY2024, by NPI
+  mips_dataset: a174-a962
+  mips_good: 75          # CMS PY2024 MIPS performance threshold (final score 75)
+  stars_good: 3          # CMS hospital overall rating: 3 = national midpoint
 
 specialty:
   # Facility taxonomies -> HiLabs facility specialty codes (sheet "Spec-Proc Weights"); every taxonomy

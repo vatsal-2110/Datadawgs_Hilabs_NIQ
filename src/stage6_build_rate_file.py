@@ -80,12 +80,13 @@ def main():
     pair_has_good = good.groupby([addr.npi.fillna(""), addr.tin]).transform("any")
     # every VERIFIED/PROBABLE address; pairs without one keep exactly their best (UNVERIFIED / NONE) address
     a = addr[good | (~pair_has_good & addr.is_best)]
-    a = a[["npi", "tin", "address", "city", "state", "zip", "county_fips5", "lat", "lon", "tier", "sources", "evidence"]]
+    a = a[["npi", "tin", "address", "city", "state", "zip", "county_fips5", "lat", "lon", "tier", "expected_accuracy",
+           "sources", "evidence"]].rename(columns={"expected_accuracy": "address_expected_accuracy"})
     for d in (h, a):
         d["_npi"] = d.npi.fillna("")
     f = h.merge(a.drop(columns="npi"), on=["_npi", "tin"], how="left")
     f["_npi"] = f._npi.replace("", None)
-    f = f.merge(spec[["npi", "spec_cd", "specialty", "specialty_source"]], left_on="_npi", right_on="npi",
+    f = f.merge(spec[["npi", "spec_cd", "specialty", "specialty_source", "primary_taxonomy_desc"]], left_on="_npi", right_on="npi",
                 how="left", suffixes=("", "_s")).drop(columns=["npi_s"])
     f = f.merge(nppes.rename(columns={"npi": "_npi", "enumeration_type": "npi_type", "name": "provider_name"}),
                 on="_npi", how="left")
@@ -93,6 +94,17 @@ def main():
     f["specialty"] = f.specialty.where(f.specialty.notna(), f.npi.map(
         lambda n: "Unmapped (TIN-only contract, no NPI)" if n is None or pd.isna(n) else "Unmapped (NPI not in NPPES)"))
     f["specialty_source"] = f.specialty_source.fillna("UNMAPPED")
+    f["provider_taxonomy"] = f.primary_taxonomy_desc
+    # D6.3: a provider with no HiLabs specialty (hospital, generic clinic, taxonomy HiLabs doesn't list) gets, per row,
+    # the HiLabs specialty that owns the billing code (highest SPEC_PROC_WEIGHT for that code), labelled CODE_DEFAULT;
+    # its own taxonomy stays in provider_taxonomy, so nothing is hidden
+    sp = pd.read_excel(cfg["paths"]["hilabs_xlsx"], sheet_name="Spec-Proc Weights", dtype=str)
+    sp["w"] = sp.SPEC_PROC_WEIGHT.astype(float)
+    top = sp.sort_values("w", ascending=False).drop_duplicates("PROC_CD").set_index("PROC_CD")
+    um = f.specialty_source.eq("UNMAPPED")
+    f.loc[um, "spec_cd"] = f.loc[um, "billing_code"].map(top.SPEC_CD)
+    f.loc[um, "specialty"] = f.loc[um, "billing_code"].map(top.SPEC_DESCRIPTION)
+    f.loc[um & f.spec_cd.notna(), "specialty_source"] = "CODE_DEFAULT"
     f["code_in_specialty_list"] = [bool(s) and isinstance(c, str) and s in c.split(",")
                                    for s, c in zip(f.spec_cd, f.hilabs_spec_cds)]
     f["tier"] = f.tier.fillna("NONE")
@@ -120,17 +132,37 @@ def main():
     cols = ["NPI", "TIN", "Address", "Billing Code", "Specialty", "Rate", "trust_score", "trust_band",
             "provider_name", "npi_type", "item_name", "billing_code_type", "rate_component", "revenue_code",
             "place_of_service", "modifier", "rate_source", "n_contracts",
-            "n_rate_variants", "variant_rate_min", "variant_rate_max", "tier", "city", "state", "zip", "county_fips5",
-            "lat", "lon", "spec_cd", "specialty_source", "code_in_specialty_list", "network_hint", "in_capitation_code",
+            "n_rate_variants", "variant_rate_min", "variant_rate_max", "tier", "address_expected_accuracy", "city", "state", "zip", "county_fips5",
+            "lat", "lon", "spec_cd", "specialty_source", "provider_taxonomy", "code_in_specialty_list", "network_hint", "in_capitation_code",
             "ppo_network_evidence", "ppo_evidence_detail", "medicare_rate", "pct_of_medicare", "medicare_source",
             "rate_check", "contract_multiplier_pct", "fits_contract_formula", "contracts_agree", "trust_detail",
             "sources", "evidence"]
     out = out[cols].rename(columns={"tier": "address_tier"}).sort_values(["NPI", "TIN", "Billing Code", "Address"])
     key = ["NPI", "TIN", "Address", "Billing Code"]
     assert not out.fillna({"NPI": "", "Address": ""}).duplicated(key).any(), "duplicate NPI x TIN x Address x Code"
+    # D6.5 PPO network only: providers with evidence of an HMO-only contract (HMO_SIGNAL: paid out-of-network by the
+    # PPO plans, capitation contract, or IPA / Ambetter-HMO group label; logic §4.1) leave the Rate File and are kept,
+    # with the reason, in their own sheet / file. MIXED (proven PPO sign + an HMO sign) stays, flagged.
+    hmo = out.ppo_network_evidence.eq("HMO_SIGNAL")
+    excluded = out[hmo].assign(exclusion_reason="HMO_SIGNAL: " + out.loc[hmo, "ppo_evidence_detail"].fillna(""))
+    out = out[~hmo].reset_index(drop=True)
     out.to_parquet(s6 / "provider_rate_file.parquet", index=False)
     save_csv(out, s6 / "provider_rate_file.csv")
+    excluded.to_parquet(s6 / "provider_rate_file_excluded_hmo.parquet", index=False)
+    save_csv(excluded, s6 / "provider_rate_file_excluded_hmo.csv")
+    kept = set(zip(out.NPI.fillna(""), out.TIN))
+    rates = rates[[k in kept for k in zip(rates.npi.fillna(""), rates.tin)]]      # variants of PPO rows only
 
+    # every number quoted in the Read Me comes from this run's outputs
+    _f = pd.read_parquet(cfg["paths"]["stage1"] / "files.parquet")
+    src_name = ", ".join(_f[_f.in_scope & _f.file_role.eq("in_network")].file_name)
+    yr = (rates.medicare_source.dropna().str.extract(r"PFS (\d{4})")[0].dropna().iloc[0]
+          if "medicare_source" in rates and rates.medicare_source.str.contains("PFS").any() else "")
+    vp = s4 / "contract_terms_validation.parquet"
+    val = pd.read_parquet(vp).set_index(["source", "cls"]).within_5pct if vp.exists() else pd.Series(dtype=float)
+    v = lambda k: f"{val[k]:.1%}" if k in val.index else "n/a"  # noqa: E731
+    acc = addr[addr.is_best].groupby("tier").expected_accuracy.first() if "expected_accuracy" in addr else pd.Series(dtype=float)
+    a_ = lambda t: f"{acc[t]:.3f}" if t in acc.index and pd.notna(acc[t]) else "n/a"  # noqa: E731
     readme = pd.DataFrame([
         ("Rate File", "One row per NPI x TIN x Address x Billing Code. Required columns first: NPI, TIN, Address, "
                       "Billing Code, Specialty, Rate."),
@@ -138,11 +170,11 @@ def main():
                  "primary contract (the provider_reference that prices the most services) when several contracts "
                  "price it. Here: fee-for-service before capitation; the provider's own component (professional or "
                  "facility); no modifier; office place of service (11), else the most common one; median if several "
-                 "remain. Source file: Health Net CA in-network file (Centene, 2026-09-30)."),
+                 f"remain. Source file: {src_name}."),
         ("rate_component", "professional = physician / professional fee (CMS-1500). facility = institutional fee for "
                            "the same CPT/HCPCS code (UB-04), decoded from a revenue-code item whose price names the "
                            "code in additional_information; revenue_code shows the RC it was billed under."),
-        ("pct_of_medicare", "Rate / Medicare 2026 rate x 100. Professional: Physician Fee Schedule for the provider's own "
+        ("pct_of_medicare", f"Rate / Medicare {yr} rate x 100. Professional: Physician Fee Schedule for the provider's own "
                             "California locality (RVUs x GPCIs x conversion factor; facility / non-facility by place of "
                             "service). Facility: OPPS national rate, not wage-adjusted; the file's facility amounts behave "
                             "like encounter-level prices, so read them as a relative scale. Blank: no Medicare price "
@@ -159,28 +191,79 @@ def main():
                                     "LIKELY formulas only; src.stage4_contract_terms)."),
         ("Estimated Rates", "Separate sheet, NOT real file rates: HiLabs codes of the provider's specialty that the file "
                             "does not price for it, estimated as contract multiplier x Medicare. Only for EXACT formulas, "
-                            "which passed a hide-and-check test (88.6% / 96.6% within 5% of the true rate vs 28.6% for "
-                            "a code-median guess)."),
+                            f"which passed a hide-and-check test (own formula {v(('own', 'EXACT'))}, TIN formula "
+                            f"{v(('TIN', 'EXACT'))} within 5% of the true rate; data/stage4/c4_contract_terms.txt)."),
         ("rate_source", "single contract, or 'primary of N contracts' when N provider_references priced the service; "
                         "all of them stay in Rate Variants (rate_median_all, rate_min, rate_max)."),
         ("Rate Variants", "Every rate row from C4 (modifiers such as 95 telehealth / 26 professional component, "
                           "other places of service), with median/min/max/count per variant."),
-        ("address_tier", "VERIFIED: Census-geocoded and confirmed by 2 independent sources (NPPES + CMS DAC) or by 1 "
-                         "source plus another NPI of the same TIN at the address / DAC group-name match. PROBABLE: "
-                         "geocoded, one current source. UNVERIFIED: otherwise. NONE: no address found."),
+        ("address_tier", "The address must exist (Census geocoder, or a government record outside NPPES lists the same "
+                         "building). VERIFIED: 2 independent source families agree (NPPES, Medicare enrolment/DAC, CMS "
+                         "facility registries, CDPH state licence), or 1 family plus another NPI of the same TIN at the "
+                         "address / DAC group-name match. PROBABLE: one non-NPPES source. UNVERIFIED: NPPES only. "
+                         "NONE: no address found."),
+        ("address_expected_accuracy", "Share of this tier's addresses that the California Department of Public Health "
+                                      "licensing record confirms (same building or within 250 m), measured on a mapping "
+                                      f"built WITHOUT that record (hold-out audit, logic D5.9): VERIFIED {a_('VERIFIED')}, "
+                                      f"UNVERIFIED {a_('UNVERIFIED')}. Blank for PROBABLE (no state-listed pair to measure)."),
+        ("specialty_source", "How Specialty was found, strongest first: NPPES_PRIMARY / NPPES_SECONDARY (taxonomy in the HiLabs "
+                             "crosswalk), FACILITY_MAP (NUCC-verified facility taxonomy), CODE_PROFILE (the provider's priced "
+                             "HiLabs codes; organizations use their whole service mix), CODE_DEFAULT (provider has no HiLabs "
+                             "specialty, e.g. a hospital: the HiLabs specialty that owns this row's billing code). "
+                             "provider_taxonomy keeps the provider's own NPPES taxonomy."),
         ("Specialty", "HiLabs specialty via NPPES taxonomy -> HiLabs Taxonomy-Spec Xwalk; facility taxonomies via a "
                       "NUCC-verified map; else inferred from priced codes; else 'Unmapped (<taxonomy>)'. "
                       "specialty_source tells which."),
         ("network_hint", "Business-name label of the provider group in the rate file (e.g. PPO_COUNTY, AMBETTER_HMO, "
                          "IPA). HMO-style hints are kept and flagged (logic D2.7)."),
+        ("Excluded - HMO signals", "Providers removed from the Rate File because the evidence says their contract is "
+                                   "HMO-only (HMO_SIGNAL): paid out-of-network by the PPO plans' own allowed-amounts file, "
+                                   "a capitation contract, or an IPA / Ambetter-HMO group label. Kept with exclusion_reason."),
         ("ppo_network_evidence", "PPO_CONFIRMED: the provider practises in a CA county with no Health Net HMO network, "
                                  "or its group is labelled PPO. HMO_SIGNAL: capitation contract, IPA / Ambetter-HMO "
                                  "label, or paid out-of-network by the PPO plans (allowed-amounts file). MIXED: both. PPO_PRESUMED: direct fee-for-service, no further evidence "
                                  "(logic §4.1). Filter to PPO_CONFIRMED for a strictly proven PPO-network view."),
         ("Logic", "docs/logic_ppo_network.md, docs/logic_address_mapping.md; metrics: docs/file_quality_metrics.md"),
     ], columns=["Item", "Meaning"])
+    # Summary sheet: what the file is and how far to trust it, readable in 30 seconds
+    files = pd.read_parquet(cfg["paths"]["stage1"] / "files.parquet")
+    src_file = ", ".join(files[files.in_scope & files.file_role.eq("in_network")].file_name)
+    lab = pd.read_parquet(cfg["paths"]["stage2"] / "plan_labels.parquet")
+    n_ppo = int(lab.is_ppo_network.sum()) if "is_ppo_network" in lab else int(lab.is_ppo.sum())
+    pct = lambda m: f"{int(m.sum()):,} ({100 * m.mean():.1f}%)"  # noqa: E731
+    strict = out.trust_band.eq("HIGH") & out.ppo_network_evidence.isin(["PPO_CONFIRMED", "PPO_PRESUMED"])
+    vc = lambda col: "; ".join(f"{k} {v:,}" for k, v in out[col].value_counts().items())  # noqa: E731
+    summary = pd.DataFrame([
+        ("Source rate file", src_file),
+        ("Network", f"Health Net California PPO network: {n_ppo} PPO plans (C2) use this file"),
+        ("Rows (one per NPI x TIN x Address x Billing Code)", f"{len(out):,}"),
+        ("Providers / groups / addresses / billing codes",
+         f"{out.NPI.nunique():,} NPIs / {out.TIN.nunique():,} TINs / {out.Address.nunique():,} addresses / "
+         f"{out['Billing Code'].nunique()} HiLabs codes"),
+        ("Rate component", vc("rate_component") + "  (facility = hospital/ASC fee, never compared with professional)"),
+        ("Address tier (rows)", vc("address_tier") + "  | measured accuracy: VERIFIED "
+         f"{out[out.address_tier.eq('VERIFIED')].address_expected_accuracy.max():.1%}, UNVERIFIED "
+         f"{out[out.address_tier.eq('UNVERIFIED')].address_expected_accuracy.max():.1%}"),
+        ("Specialty source (rows)", vc("specialty_source")),
+        ("PPO-network evidence (rows)", vc("ppo_network_evidence")),
+        ("Rate check (rows)", f"OK {pct(out.rate_check.eq('OK'))}; flagged rows are real file values, kept"),
+        ("Trust band (rows)", vc("trust_band")),
+        ("Rate vs Medicare (professional, median)",
+         f"{out[out.rate_component.eq('professional')].pct_of_medicare.median():.0f}% of Medicare 2026 for the provider's CA locality"),
+        ("Strict view", f"trust_band = HIGH and ppo_network_evidence in (PPO_CONFIRMED, PPO_PRESUMED): {pct(strict)} rows"),
+        ("Excluded - HMO signals sheet", f"{len(excluded):,} rows of {excluded[['NPI', 'TIN']].drop_duplicates().shape[0]} "
+                                         "providers moved OUT of the Rate File: evidence of an HMO-only contract (paid "
+                                         "out-of-network by the PPO plans, capitation, or IPA / Ambetter-HMO label). Kept "
+                                         "for transparency with exclusion_reason; not PPO-network rates."),
+        ("Estimated Rates sheet", "separate, NOT file rates: contract multiplier x Medicare, only for formulas that passed "
+                                  "a hide-and-check test"),
+        ("How to use", "Filter the Rate File sheet: Billing Code + Specialty + address_tier / trust_band. Rate Variants "
+                       "holds every price behind a headline rate; Read Me defines every column."),
+    ], columns=["Item", "Value"])
     ep = s4 / "estimated_rates.parquet"
     est = pd.read_parquet(ep) if ep.exists() else pd.DataFrame()
+    if len(est):
+        est = est[[k in kept for k in zip(est.npi.fillna(""), est.tin)]]
     xp = s6 / "provider_rate_file.xlsx"
     try:
         if xp.exists():
@@ -189,16 +272,21 @@ def main():
         print(f"WARNING: {xp} is open in Excel; close it and re-run (parquet and CSV are written)")
         return
     with pd.ExcelWriter(xp, engine="openpyxl") as xw:
+        summary.to_excel(xw, sheet_name="Summary", index=False)
         out.to_excel(xw, sheet_name="Rate File", index=False)
         rates.to_excel(xw, sheet_name="Rate Variants", index=False)
         est.to_excel(xw, sheet_name="Estimated Rates", index=False)
+        excluded.to_excel(xw, sheet_name="Excluded - HMO signals", index=False)
         readme.to_excel(xw, sheet_name="Read Me", index=False)
-        for name, df in (("Rate File", out), ("Rate Variants", rates), ("Estimated Rates", est)):
+        for name, df in (("Rate File", out), ("Rate Variants", rates), ("Estimated Rates", est),
+                         ("Excluded - HMO signals", excluded)):
             ws = xw.sheets[name]
             ws.freeze_panes = "A2"
             ws.auto_filter.ref = ws.dimensions
             for i, col in enumerate(df.columns, 1):
                 ws.column_dimensions[ws.cell(1, i).column_letter].width = min(45, max(10, len(str(col)) + 2))
+        xw.sheets["Summary"].column_dimensions["A"].width = 48
+        xw.sheets["Summary"].column_dimensions["B"].width = 150
         xw.sheets["Read Me"].column_dimensions["A"].width = 16
         xw.sheets["Read Me"].column_dimensions["B"].width = 140
 

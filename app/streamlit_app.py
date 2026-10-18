@@ -15,6 +15,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.common.normalize import ROOT, load_config  # noqa: E402
+from src.stage3_scorecard import W_IN  # noqa: E402
 
 # Reference palette (dataviz skill): categorical slots 1-3, ordinal blue ramp, text tokens
 CAT = ["#2a78d6", "#eb6834", "#1baf7a"]
@@ -30,7 +31,9 @@ P = cfg["paths"]
 def load():
     d = {
         "summary": json.loads((ROOT / "data" / "summary.json").read_text(encoding="utf-8")),
-        "scores": pd.read_parquet(P["stage3"] / "file_scores.parquet"),
+        "scores": pd.read_parquet(P["stage3"] / "scorecard_in_network.parquet"),
+        "scores_aa": pd.read_parquet(P["stage3"] / "scorecard_allowed.parquet"),
+        "scores_ix": pd.read_parquet(P["stage3"] / "scorecard_index.parquet"),
         "labels": pd.read_parquet(P["stage2"] / "plan_labels.parquet"),
         "rf": pd.read_parquet(P["stage6"] / "provider_rate_file.parquet"),
         "addr": pd.read_parquet(P["stage5"] / "npi_tin_address.parquet"),
@@ -62,20 +65,20 @@ if view == "Executive":
     c[4].metric("TINs with verified address", f"{S['address_linkage']['pct_tins_with_verified_address']}%")
 
     st.subheader("From index files to the PPO network")
-    funnel = pd.DataFrame({"step": ["Plan rows in 11 index files", "CA commercial group plans", "PPO plans"],
+    funnel = pd.DataFrame({"step": [f"Plan rows in {S['index_files_parsed']} index files", "CA commercial group plans", "PPO plans"],
                            "plans": [S["plan_rows"], S["ca_commercial_group_plans"], S["ppo_plans"]]})
     ch = alt.Chart(funnel).mark_bar(color=CAT[0], cornerRadiusEnd=4, height=22).encode(
         x=alt.X("plans:Q", title="Plans"), y=alt.Y("step:N", sort=None, title=None),
         tooltip=["step", alt.Tooltip("plans:Q", format=",")])
     st.altair_chart(axis_cfg(ch + ch.mark_text(align="left", dx=4, color=INK).encode(text=alt.Text("plans:Q", format=","))),
-                    width="stretch")
+                    use_container_width=True)
     lab = D["labels"].product_type.value_counts().rename_axis("product_type").reset_index(name="plans")
     st.caption("Plan labels: " + ", ".join(f"{r.product_type} {r.plans}" for r in lab.itertuples())
                + ". EOA (Elect Open Access) is defined by Health Net as an HMO plan.")
 
-    st.subheader("File quality (C3)")
+    st.subheader("File quality (C3 scorecard)")
     sc = D["scores"]
-    metrics = [m for m in sc.columns if m.startswith("M")]
+    metrics = list(W_IN)
     long = sc.melt(id_vars=["file_name"], value_vars=metrics, var_name="metric", value_name="score")
     long["file"] = long.file_name.str.extract(r"llc_([a-z\-]+)_in-network")[0]
     files = list(long.file.unique())[:3]
@@ -83,8 +86,12 @@ if view == "Executive":
         y=alt.Y("metric:N", title=None), x=alt.X("score:Q", scale=alt.Scale(domain=[0, 100]), title="Score (0-100)"),
         yOffset="file:N", color=alt.Color("file:N", scale=alt.Scale(domain=files, range=CAT[:len(files)]), title="File"),
         tooltip=["file", "metric", alt.Tooltip("score:Q", format=".1f")])
-    st.altair_chart(axis_cfg(ch), width="stretch")
-    st.dataframe(sc[["role", "file_name", "overall_score"] + metrics], hide_index=True, width="stretch")
+    st.altair_chart(axis_cfg(ch), use_container_width=True)
+    st.dataframe(sc[["role", "file_name", "overall_score"] + metrics], hide_index=True, use_container_width=True)
+    st.caption("Allowed-amounts files and index files are graded too (docs/file_quality_metrics.md):")
+    st.dataframe(D["scores_aa"][["role", "file_name", "overall_score"]], hide_index=True, use_container_width=True)
+    st.dataframe(D["scores_ix"][["index_name", "overall_score", "Price Reachability", "Plan ID Integrity"]],
+                 hide_index=True, use_container_width=True)
 
     st.subheader("Address linkage (C5)")
     best = D["addr"][D["addr"].is_best].tier.value_counts().reindex(list(TIER_COLORS)).fillna(0).astype(int)
@@ -94,20 +101,26 @@ if view == "Executive":
         color=alt.Color("tier:N", scale=alt.Scale(domain=list(TIER_COLORS), range=list(TIER_COLORS.values())), legend=None),
         tooltip=["tier", alt.Tooltip("pairs:Q", format=",")])
     st.altair_chart(axis_cfg(ch + ch.mark_text(align="left", dx=4, color=INK).encode(text="pairs:Q")),
-                    width="stretch")
+                    use_container_width=True)
 
     if len(D["ce"]):
         st.subheader("Cost effectiveness (C7)")
-        st.write(D["ce"].label.value_counts().rename_axis("label").reset_index(name="providers"))
+        k = st.columns(2)
+        k[0].write(D["ce"].label.value_counts().rename_axis("price label").reset_index(name="providers"))
+        k[1].write(D["ce"].value_label.value_counts().rename_axis("value label (price x CMS quality)")
+                   .reset_index(name="providers"))
 
 else:
     st.title("Analyst view: provider rates")
     rf = D["rf"]
-    f1, f2, f3, f4 = st.columns(4)
+    f1, f2, f3, f4, f5 = st.columns(5)
     code = f1.selectbox("Billing code", ["(all)"] + sorted(rf["Billing Code"].unique()))
     specs = f2.multiselect("Specialty", sorted(rf.Specialty.dropna().unique()))
     tiers = f3.multiselect("Address tier", list(TIER_COLORS), default=["VERIFIED", "PROBABLE"])
-    hint = f4.checkbox("Exclude HMO-style hints (AMBETTER_HMO / IPA / capitation)", value=False)
+    comp = f4.selectbox("Fee type", ["(all)", "professional", "facility"],
+                        help="professional = doctor's fee; facility = hospital/ASC fee for the same code. Never mixed in C7")
+    strict = f5.checkbox("Strict view: HIGH trust only", value=False,
+                         help="trust_band HIGH (rate check, contracts, contract formula, PPO evidence, address)")
     q = rf.copy()
     if code != "(all)":
         q = q[q["Billing Code"] == code]
@@ -115,23 +128,34 @@ else:
         q = q[q.Specialty.isin(specs)]
     if tiers:
         q = q[q.address_tier.isin(tiers)]
-    if hint:
-        q = q[~(q.network_hint.fillna("").str.contains("AMBETTER_HMO|IPA") | q.in_capitation_code.fillna(False))]
+    if comp != "(all)":
+        q = q[q.rate_component.eq(comp)]
+    if strict:
+        q = q[q.trust_band.eq("HIGH")]
     m = st.columns(4)
     m[0].metric("Rows", f"{len(q):,}")
     m[1].metric("NPIs", f"{q.NPI.nunique():,}")
     m[2].metric("TINs", f"{q.TIN.nunique():,}")
-    m[3].metric("Median rate", f"${q.Rate.median():,.2f}" if len(q) else "-")
+    # a doctor's fee and a hospital fee are different prices: one median per fee type, never blended
+    med = q.groupby("rate_component").Rate.median()
+    m[3].metric("Median rate" + (f" ({med.index[0]})" if len(med) == 1 else ""),
+                (f"${med.iloc[0]:,.2f}" if len(med) == 1 else
+                 " / ".join(f"{k} ${v:,.0f}" for k, v in med.items())) if len(q) else "-")
     if code != "(all)" and len(q):
         st.caption(f"{code}: {q.item_name.iloc[0]}")
-        ch = alt.Chart(q.drop_duplicates(["NPI", "TIN"])).mark_bar(color=CAT[0], cornerRadiusEnd=4).encode(
+        ch = alt.Chart(q.drop_duplicates(["NPI", "TIN", "rate_component"])).mark_bar(cornerRadiusEnd=4).encode(
             x=alt.X("Rate:Q", bin=alt.Bin(maxbins=40), title="Headline rate (USD)"),
-            y=alt.Y("count():Q", title="Providers"), tooltip=[alt.Tooltip("count():Q", title="Providers")])
-        st.altair_chart(axis_cfg(ch), width="stretch")
+            y=alt.Y("count():Q", title="Providers"),
+            color=alt.Color("rate_component:N", scale=alt.Scale(domain=["professional", "facility"], range=CAT[:2]),
+                            title="Fee type"),
+            tooltip=["rate_component", alt.Tooltip("count():Q", title="Providers")])
+        st.altair_chart(axis_cfg(ch), use_container_width=True)
+    st.caption("PPO network only: providers with HMO evidence are in the Excel sheet 'Excluded - HMO signals'.")
     st.dataframe(q[["NPI", "TIN", "provider_name", "Address", "Billing Code", "item_name", "Specialty", "Rate",
-                    "address_tier", "place_of_service", "modifier", "n_rate_variants", "network_hint"]],
-                 hide_index=True, width="stretch")
+                    "trust_score", "pct_of_medicare", "rate_check", "address_tier", "address_expected_accuracy",
+                    "rate_component", "place_of_service", "modifier", "ppo_network_evidence"]],
+                 hide_index=True, use_container_width=True)
     if len(D["ce"]):
         st.subheader("Cost effectiveness of the providers shown")
         ce = D["ce"].merge(q[["NPI", "TIN"]].drop_duplicates(), on=["NPI", "TIN"])
-        st.dataframe(ce.sort_values("weighted_cost_index"), hide_index=True, width="stretch")
+        st.dataframe(ce.sort_values("weighted_cost_index"), hide_index=True, use_container_width=True)

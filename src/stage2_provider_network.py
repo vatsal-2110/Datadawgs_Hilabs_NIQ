@@ -153,7 +153,7 @@ def main():
          "   those contracts are priced differently (evidence, not proof).",
          "",
          "Reading: PPO_CONFIRMED pairs prove the file carries PPO-network contracts that cannot be HMO contracts;",
-         "HMO_SIGNAL pairs are kept in the rate file but flagged (D2.7); PPO_PRESUMED = direct fee-for-service",
+         "HMO_SIGNAL pairs leave the C6 Rate File (sheet 'Excluded - HMO signals', D6.5); PPO_PRESUMED = direct fee-for-service",
          "contracts in the PPO plans' in-network file with no further evidence either way."]
     (P["stage2"] / "c2_provider_network.txt").write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))

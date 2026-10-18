@@ -34,12 +34,13 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import zipfile
 
 import numpy as np
 import pandas as pd
 
-from src.common.normalize import load_config, save_csv
+from src.common.normalize import file_name_from_url, load_config, save_csv
 from src.stage1_ingest_index import download
 from src.stage2_provider_network import CA_COUNTY_FIPS
 
@@ -57,6 +58,26 @@ def _num(x) -> float:
         return float(str(x).replace("$", "").replace(",", ""))
     except ValueError:
         return np.nan
+
+
+def cms_paths(cfg) -> dict:
+    """Local file of every CMS source = the file name in its config URL (no file name is fixed in code)."""
+    P, S = cfg["paths"], cfg["sources"]
+    return {"pfs": P["cms_pfs"] / file_name_from_url(S["cms_pfs_rvu_zip"]),
+            "prior": P["cms_pfs_prior"] / file_name_from_url(S["cms_pfs_prior_zip"]),
+            "opps": P["cms_opps"] / file_name_from_url(S["cms_opps_addenda_zip"])}
+
+
+def pfs_year(path) -> str:
+    """Schedule year from the CMS RVU file inside the zip (PPRRVU<year>_...)."""
+    n = next(x for x in zipfile.ZipFile(path).namelist() if x.startswith("PPRRVU"))
+    return re.search(r"PPRRVU(\d{4})", n).group(1)
+
+
+def opps_label(path) -> str:
+    n = next(x for x in zipfile.ZipFile(path).namelist() if "Addendum B" in x.replace("_", " "))
+    m = re.search(r"(\d{4})[ _]([A-Za-z]+)[ _]Web", n) or re.search(r"(\d{4}) NFRM", n)
+    return f"{m.group(2)} {m.group(1)}" if m and m.lastindex == 2 else (f"{m.group(1)} final rule" if m else n)
 
 
 def load_pfs(path):
@@ -107,16 +128,18 @@ def load_opps(path):
 def main():
     cfg = load_config()
     P, S = cfg["paths"], cfg["sources"]
-    pfs_zip, opps_zip = P["cms_pfs"] / "rvu26d.zip", P["cms_opps"] / "opps_addb_2026oct.zip"
+    cp = cms_paths(cfg)
+    pfs_zip, opps_zip = cp["pfs"], cp["opps"]
     for url, dest in ((S["cms_pfs_rvu_zip"], pfs_zip), (S["cms_opps_addenda_zip"], opps_zip)):
         if not dest.exists():
             dest.parent.mkdir(parents=True, exist_ok=True)
             download(url, dest, cfg)
-    prior_zip = P["cms_pfs_prior"] / "rvu25d.zip"
+    prior_zip = cp["prior"]
     if not prior_zip.exists():
         prior_zip.parent.mkdir(parents=True, exist_ok=True)
         download(S["cms_pfs_prior_zip"], prior_zip, cfg)
     pfs, gp, county_loc = load_pfs(pfs_zip)
+    yr, yr0, olab = pfs_year(pfs_zip), pfs_year(prior_zip), opps_label(opps_zip)
     opps = load_opps(opps_zip)
 
     r = pd.read_parquet(P["stage4"] / "rates.parquet")
@@ -154,8 +177,8 @@ def main():
     r["medicare_rate"] = np.round(np.where(prof, pfs_amt, opps_amt), 2)
     r.loc[r.medicare_rate <= 0, "medicare_rate"] = np.nan
     r["medicare_source"] = np.where(r.medicare_rate.isna(), "", np.where(
-        prof, np.where(fac_set, "PFS 2026 facility, CA locality", "PFS 2026 non-facility, CA locality"),
-        "OPPS Oct 2026 national (not wage-adjusted)"))
+        prof, np.where(fac_set, f"PFS {yr} facility, CA locality", f"PFS {yr} non-facility, CA locality"),
+        f"OPPS {olab} national (not wage-adjusted)"))
     r.loc[~prof, "medicare_locality"] = "national (OPPS)"
     r["pct_of_medicare"] = (100 * r.rate / r.medicare_rate).round(1)
 
@@ -180,7 +203,7 @@ def main():
     r["rate_check"] = ["; ".join(c) or "OK" for c in chk]
     std_p = prof & r.modifier.eq("").values & ~np.isnan(pfs_amt) & ~np.isnan(amt25)
     cur = {}
-    for y, amt in (("2026", pfs_amt), ("2025", amt25)):
+    for y, amt in ((yr, pfs_amt), (yr0, amt25)):
         pct = 100 * r.rate.values[std_p] / amt[std_p]
         cur[y] = (int((np.abs(pct - 100) <= 0.05).sum()), int((np.abs(pct - np.round(pct)) <= 0.05).sum()))
     n_std = int(std_p.sum())
@@ -192,8 +215,8 @@ def main():
     b = r[r.medicare_rate.notna()]
     std = b[b.modifier.eq("")]
     L = ["C4 Medicare benchmark and rate plausibility", "=" * 78,
-         f"Sources: CMS 2026 PFS RVU file (October release = latest 2026 quarter, {len(pfs):,} priced code lines, {len(gp)} CA localities, "
-         f"CF {pfs.cf.dropna().iloc[0]}); CMS OPPS Addendum B, October 2026 quarterly update ({len(opps):,} paid codes)",
+         f"Sources: CMS {yr} PFS RVU file {pfs_zip.name} ({len(pfs):,} priced code lines, {len(gp)} CA localities, "
+         f"CF {pfs.cf.dropna().iloc[0]}); CMS OPPS Addendum B {olab} ({len(opps):,} paid codes); URLs in config.yaml",
          f"Rows with a Medicare benchmark: {len(b):,} of {len(r):,} ({100 * len(b) / len(r):.1f}%)  "
          f"professional {int(b.component.eq('professional').sum()):,}, facility {int(b.component.eq('facility').sum()):,}",
          "   (no benchmark: drugs / supplies priced per unit (J-codes: Medicare ASP), lab codes on the CLFS, packaged codes)",
@@ -201,14 +224,14 @@ def main():
          f"professional rows; CA median GPCI for the rest",
          "",
          "Data currency check (is the Medicare data stale?):",
-         "   PFS = October 2026 release (4th and latest 2026 quarter; no later 2026 or 2027 file published on the run",
-         "   date). OPPS = October 2026 quarterly Addendum B (vs the annual rule: procedure rates identical, only",
-         "   quarterly drug prices changed).",
+         f"   PFS = {pfs_zip.name} (schedule year {yr}); OPPS = Addendum B {olab}. Release choice and the check that",
+         "   no newer release existed are documented in docs/logic_ppo_network.md section 5, step 7.",
          f"   Health Net standard professional rates ({n_std:,} rows) vs the same locality's PFS:",
-         f"      2026: exactly 100% of Medicare {cur['2026'][0]:,} rows; at a whole-number % {cur['2026'][1]:,}",
-         f"      2025: exactly 100% of Medicare {cur['2025'][0]:,} rows; at a whole-number % {cur['2025'][1]:,}",
+         f"      {yr}: exactly 100% of Medicare {cur[yr][0]:,} rows; at a whole-number % {cur[yr][1]:,}",
+         f"      {yr0}: exactly 100% of Medicare {cur[yr0][0]:,} rows; at a whole-number % {cur[yr0][1]:,}",
          f"      chance alone (+-0.05 of a whole number): ~{round(0.1 * n_std):,} rows",
-         "   -> Health Net's contracts are written on the 2026 schedule we use: the benchmark is current.",
+         (f"   -> Health Net's contracts are written on the {yr} schedule we use: the benchmark is current."
+          if cur[yr][1] > cur[yr0][1] else f"   -> WARNING: rates fit the {yr0} schedule better: check the PFS release."),
          "",
          "Rate as % of Medicare, standard service (no modifier), median [p25-p75]:"]
     for c, d in std.groupby("component"):

@@ -1,0 +1,12 @@
+index_name,brand,last_updated_on,age_days,plan_rows,unreachable_plan_rows,invalid_plan_ids,ambiguous_plans,filler_rows,identical_to,trust_gate_failed,overall_before_gate,overall_score,Price Reachability,Plan ID Integrity,Plan-to-File Clarity,Filler-Free Score,Schema Completeness,Freshness
+healthnet,healthnet,2026-09-30,18,1693,0,157,0,3,,False,97.7,97.7,100.0,90.73,100.0,99.82,100.0,100.0
+ambetter,ambetter,2026-09-28,20,1120,0,0,0,0,,False,100.0,100.0,100.0,100.0,100.0,100.0,100.0,100.0
+fidelis,fidelis,2026-09-28,20,94,0,0,0,0,,False,100.0,100.0,100.0,100.0,100.0,100.0,100.0,100.0
+qualchoice,qualchoice,2026-09-28,20,308,308,0,0,1,,False,65.0,65.0,0.0,100.0,100.0,99.68,100.0,100.0
+qualchoice_alf_plan,qualchoice,2026-09-28,20,32,32,0,0,0,,False,65.0,65.0,0.0,100.0,100.0,100.0,100.0,100.0
+qualchoice_arnold_and_blevins,qualchoice,2026-09-28,20,1,1,0,0,0,,False,65.0,65.0,0.0,100.0,100.0,100.0,100.0,100.0
+qualchoice_big_four,qualchoice,2026-09-28,20,4,4,0,0,0,,False,65.0,65.0,0.0,100.0,100.0,100.0,100.0,100.0
+qualchoice_city_of_fort_smith,qualchoice,2026-09-28,20,4,4,0,0,4,qualchoice_big_four,False,55.0,55.0,0.0,100.0,100.0,0.0,100.0,100.0
+qualchoice_city_of_hot_springs,qualchoice,2026-09-28,20,2,2,0,0,0,,False,65.0,65.0,0.0,100.0,100.0,100.0,100.0,100.0
+qualchoice_dillards,qualchoice,2026-09-28,20,12,12,0,0,0,,False,65.0,65.0,0.0,100.0,100.0,100.0,100.0,100.0
+qualchoice_jv_manufacturing,qualchoice,2026-09-28,20,5,5,0,0,0,,False,65.0,65.0,0.0,100.0,100.0,100.0,100.0,100.0

@@ -1,0 +1,238 @@
+{
+  "run_date": "2026-10-18",
+  "index_files_parsed": 11,
+  "plan_rows": 3275,
+  "unique_rate_files": 66,
+  "duplicate_file_references_removed": 14,
+  "ca_commercial_group_plans": 1312,
+  "ppo_plans": 453,
+  "ppo_plans_incl_epo_on_inferred_ppo_network": 453,
+  "plans_ruled_out": {
+    "HMO": 723,
+    "EOA_HYBRID": 127,
+    "POS": 6,
+    "EPO": 3
+  },
+  "ppo_rate_files": [
+    "2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json"
+  ],
+  "file_quality_scores": {
+    "in_network": [
+      {
+        "file_name": "2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json",
+        "role": "USED (in scope)",
+        "overall_score": 78.0
+      },
+      {
+        "file_name": "2026-09-28_centene-management-company-llc_ambetter-ca_in-network.json",
+        "role": "comparison",
+        "overall_score": 88.0
+      }
+    ],
+    "allowed": [
+      {
+        "file_name": "2026-09-30_centene-management-company-llc_healthnet-ca_allowed-amounts.json",
+        "role": "USED (in scope)",
+        "overall_score": 40.2
+      },
+      {
+        "file_name": "2026-09-28_centene-management-company-llc_ambetter-ca_allowed-amounts.json",
+        "role": "comparison",
+        "overall_score": 81.3
+      }
+    ],
+    "index": [
+      {
+        "index_name": "healthnet",
+        "overall_score": 97.7
+      },
+      {
+        "index_name": "ambetter",
+        "overall_score": 100.0
+      },
+      {
+        "index_name": "fidelis",
+        "overall_score": 100.0
+      },
+      {
+        "index_name": "qualchoice",
+        "overall_score": 65.0
+      },
+      {
+        "index_name": "qualchoice_alf_plan",
+        "overall_score": 65.0
+      },
+      {
+        "index_name": "qualchoice_arnold_and_blevins",
+        "overall_score": 65.0
+      },
+      {
+        "index_name": "qualchoice_big_four",
+        "overall_score": 65.0
+      },
+      {
+        "index_name": "qualchoice_city_of_fort_smith",
+        "overall_score": 55.0
+      },
+      {
+        "index_name": "qualchoice_city_of_hot_springs",
+        "overall_score": 65.0
+      },
+      {
+        "index_name": "qualchoice_dillards",
+        "overall_score": 65.0
+      },
+      {
+        "index_name": "qualchoice_jv_manufacturing",
+        "overall_score": 65.0
+      }
+    ]
+  },
+  "file_quality_crosscheck_7_metric_grader": [
+    {
+      "file_name": "2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json",
+      "role": "USED (in scope)",
+      "overall_score": 81.0
+    },
+    {
+      "file_name": "2026-09-28_centene-management-company-llc_ambetter-ca_in-network.json",
+      "role": "comparison",
+      "overall_score": 94.6
+    }
+  ],
+  "rate_file_specialty_sources": {
+    "NPPES_PRIMARY": 4994,
+    "CODE_DEFAULT": 2042,
+    "CODE_PROFILE": 1752,
+    "NPPES_SECONDARY": 364,
+    "FACILITY_MAP": 349
+  },
+  "providers_in_ppo_file": {
+    "npi_tin_pairs": 3780,
+    "unique_npis": 3734,
+    "unique_tins": 2888
+  },
+  "rates_extracted": {
+    "rate_rows": 8820,
+    "billing_codes": 203,
+    "unique_npis": 2995,
+    "unique_tins": 2356
+  },
+  "rates_all_codes": {
+    "rate_rows": 264439,
+    "unique_npis": 3734,
+    "billing_codes": 1276,
+    "by_component": {
+      "facility": 250837,
+      "professional": 13602
+    }
+  },
+  "hilabs_rates_by_component": {
+    "facility": 120,
+    "professional": 134
+  },
+  "out_of_network": {
+    "payments": 1970,
+    "codes": 336,
+    "npis": 727,
+    "codes_also_in_network": 158,
+    "median_oon_allowed_to_in_network": 24.265
+  },
+  "contract_terms": {
+    "providers": 2570,
+    "own_formula": {
+      "SINGLE": 1583,
+      "LIKELY": 389,
+      "EXACT": 349,
+      "NONE": 249
+    },
+    "inherited_from_tin": 252,
+    "estimated_rates": 4654,
+    "estimated_providers": 445
+  },
+  "trust_band_rows": {
+    "HIGH": 6066,
+    "MEDIUM": 2621,
+    "LOW": 814
+  },
+  "final_rate_file": {
+    "rows": 9501,
+    "unique_npis": 2869,
+    "unique_tins": 2263,
+    "unique_addresses": 2947,
+    "billing_codes": 195,
+    "rows_by_address_tier": {
+      "VERIFIED": 6631,
+      "UNVERIFIED": 2560,
+      "PROBABLE": 297,
+      "NONE": 13
+    }
+  },
+  "address_linkage": {
+    "pct_npis_with_verified_address": 49.8,
+    "pct_tins_with_verified_address": 45.1,
+    "pct_npis_with_verified_or_probable": 51.8,
+    "pct_tins_with_verified_or_probable": 47.6,
+    "best_address_tier_per_pair": {
+      "VERIFIED": 1876,
+      "UNVERIFIED": 1819,
+      "PROBABLE": 77,
+      "NONE": 8
+    }
+  },
+  "address_baseline_vs_pipeline": {
+    "npis": 3734,
+    "baseline_nppes_primary_found": 3726,
+    "baseline_nppes_primary_independently_confirmed": 1803,
+    "pct_baseline_confirmed": 48.3,
+    "pipeline_npis_verified": 1859,
+    "pct_pipeline_verified": 49.8,
+    "verified_only_at_non_nppes_primary_address": 56,
+    "pairs_best_address_not_nppes_primary": 214
+  },
+  "plan_network_use": {
+    "EPO_NETWORK": {
+      "EVIDENCE": 0,
+      "NAME_ONLY": 0,
+      "PRODUCT_DOCUMENT": 3
+    },
+    "HMO_NETWORK_ONLY": {
+      "EVIDENCE": 656,
+      "NAME_ONLY": 67,
+      "PRODUCT_DOCUMENT": 0
+    },
+    "PPO_NETWORK_PRIMARY": {
+      "EVIDENCE": 393,
+      "NAME_ONLY": 60,
+      "PRODUCT_DOCUMENT": 0
+    },
+    "PPO_NETWORK_TIER": {
+      "EVIDENCE": 118,
+      "NAME_ONLY": 9,
+      "PRODUCT_DOCUMENT": 6
+    }
+  },
+  "ppo_network_evidence_pairs": {
+    "PPO_PRESUMED": 3394,
+    "PPO_CONFIRMED": 215,
+    "HMO_SIGNAL": 168,
+    "MIXED": 3
+  },
+  "rate_rows_by_ppo_evidence": {
+    "PPO_PRESUMED": 8579,
+    "MIXED": 481,
+    "PPO_CONFIRMED": 441
+  },
+  "specialty_sources": {
+    "NPPES_PRIMARY": 2136,
+    "UNMAPPED": 704,
+    "CODE_PROFILE": 487,
+    "FACILITY_MAP": 289,
+    "NPPES_SECONDARY": 118
+  },
+  "cost_effectiveness_labels": {
+    "AVERAGE": 1587,
+    "HIGH_COST": 636,
+    "COST_EFFECTIVE": 532
+  }
+}

@@ -5,6 +5,9 @@ Candidate sources per (NPI, TIN)       (fetched by src.stage5_fetch_sources)
   NPPES_SEC   NPPES secondary practice locations
   NPPES_ENDPOINT  NPPES endpoint affiliation address (same NPPES family: can't confirm NPPES by itself)
   DAC         CMS Doctors & Clinicians: Medicare-enrolled practice addresses (refreshed monthly)
+  CDPH        California Department of Public Health, Licensed and Certified Healthcare Facility Listing
+              (state regulator; hospitals, surgery centres, clinics, home health, dialysis, SNF, ...), matched
+              on the facility's NPI. Source: https://data.chhs.ca.gov/dataset/healthcare-facility-locations
   TIN_SIBLING for TIN-only rows (no NPI): addresses of the other NPIs under the same TIN
 (NPPES MAILING addresses are NOT practice locations and are never used as candidates.)
 
@@ -13,17 +16,24 @@ US Census geocoder (batch API), which returns a standardized address, Match / No
 FIPS. Addresses are compared at building level (standardized street + ZIP5); suites are kept for display only.
 
 Evidence per candidate (npi, tin, address):
-  n_independent_sources   families agreeing on the building: NPPES, CMS enrolment (DAC), CMS facility registry
+  n_independent_sources   families agreeing on the building: NPPES, CMS enrolment (DAC), CMS facility registry,
+                          state licensing (CDPH)
   tin_corroboration       another NPI billing under the SAME TIN in the PTD file practices at this address
   dac_name_match          DAC group (facility_name) shares >= 50% of name tokens with the PTD business name
   geocoded                Census Match (the address exists)
   nppes_current           reported only: NPPES update age does not predict a correct address (stage5_audit, A)
 
 Tiers (logic D5.5, D5.8):
-  VERIFIED   geocoded AND (n_independent_sources >= 2 OR (1 source AND (tin_corroboration OR dac_name_match)))
-  PROBABLE   geocoded AND one non-NPPES source (DAC individual or group, or a CMS facility registry)
+  exists     Census geocoder match, OR a government record outside NPPES lists the exact building (D5.10)
+  VERIFIED   exists AND (n_independent_sources >= 2 OR (1 source AND (tin_corroboration OR dac_name_match)))
+  PROBABLE   exists AND one non-NPPES source (DAC individual or group, a CMS facility registry, or CDPH)
   UNVERIFIED everything else (NPPES-only, not geocoded, or a PO box): kept, labelled
 Ranking inside a pair: tier, then evidence points; is_best marks the top address.
+
+Accuracy of the tiers (hold-out audit, logic D5.9): the mapping is built twice. Run 1 leaves CDPH out; CDPH then
+referees run 1's addresses for every pair whose NPI the state lists: correct = same building (standardized street +
+ZIP5) or within AUDIT_METERS of the state's geocoded facility. The share correct per tier becomes the column
+expected_accuracy of the final run (run 2, CDPH included as a source). The referee covers licensed facilities only.
 
 Outputs (data/stage5/): npi_tin_address.parquet (+ .csv), geocode.parquet, c5_report.txt
 Usage: python -m src.stage5_address_map
@@ -39,14 +49,36 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import requests
 
 from src.common.address import building_key, standardize_address
-from src.common.normalize import load_config, save_csv
+from src.common.normalize import file_name_from_url, load_config, save_csv
+from src.stage1_ingest_index import download
 
 STOP = {"INC", "LLC", "MD", "M", "D", "THE", "OF", "A", "PC", "CORP", "CORPORATION", "GROUP", "MEDICAL", "ASSOCIATES",
         "PLLC", "LTD", "CO", "AND", "&", "CENTER", "HEALTH"}
+
+
+AUDIT_METERS = 250
+
+
+def load_cdph(cfg) -> pd.DataFrame:
+    """CDPH Licensed and Certified Healthcare Facility Listing: open facilities that carry an NPI."""
+    path = cfg["paths"]["cdph"] / file_name_from_url(cfg["sources"]["cdph_facility_locations_csv"])
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        download(cfg["sources"]["cdph_facility_locations_csv"], path, cfg)
+    d = pd.read_csv(path, dtype=str, encoding="latin-1")
+    d = d[d.FAC_STATUS_TYPE_CODE.eq("OPEN")]
+    d["npi"] = d.NPI.str.extract(r"(\d{10})")[0]
+    d = d.dropna(subset=["npi", "ADDRESS"])
+    return pd.DataFrame({"npi": d.npi, "address_1": d.ADDRESS, "address_2": "", "city": d.CITY, "state": "CA",
+                         "zip": d.ZIP.str[:5], "facility_name": d.FACNAME, "fac_type": d.FAC_TYPE_CODE,
+                         "cdph_lat": pd.to_numeric(d.LATITUDE, errors="coerce"),
+                         "cdph_lon": pd.to_numeric(d.LONGITUDE, errors="coerce"),
+                         "data_date": d.DATA_DATE}).drop_duplicates(["npi", "address_1", "zip"])
 
 
 def norm_street(s) -> str:
@@ -112,8 +144,8 @@ def geocode(addresses: pd.DataFrame, cfg) -> pd.DataFrame:
     return out
 
 
-def main():
-    cfg = load_config()
+def build(cfg, use_cdph: bool = True):
+    """Candidates -> geocode -> evidence -> tiers. use_cdph=False builds the hold-out version for the audit."""
     s5 = cfg["paths"]["stage5"]
     pairs = pd.read_parquet(cfg["paths"]["stage4"] / "tin_npi_pairs.parquet")
     nppes = pd.read_parquet(s5 / "nppes_npi.parquet")
@@ -130,6 +162,9 @@ def main():
     na["facility_name"] = None
     d = dac.rename(columns={"adr_ln_1": "address_1", "adr_ln_2": "address_2", "citytown": "city"})
     d = d.assign(source="DAC")[["npi", "source", "address_1", "address_2", "city", "state", "zip", "facility_name"]]
+    if use_cdph:          # state licensing record of the facility, matched on NPI
+        cd = load_cdph(cfg).assign(source="CDPH")
+        d = pd.concat([d, cd[["npi", "source", "address_1", "address_2", "city", "state", "zip", "facility_name"]]])
     cand = pd.concat([na[["npi", "source", "address_1", "address_2", "city", "state", "zip", "facility_name"]], d])
     cand = pairs[["npi", "tin", "business_names", "npi_missing"]].merge(cand, on="npi", how="left")
     # DAC_GROUP: Medicare group practice addresses whose group name EXACTLY equals the organization's NPPES name
@@ -171,13 +206,13 @@ def main():
     g.to_parquet(s5 / "geocode.parquet", index=False)
     cand = cand.merge(g[["key", "geocoded", "match_type", "std_address", "lat", "lon", "county_fips5", "tract"]],
                       on="key", how="left")
-    cand["geocoded"] = cand.geocoded.fillna(False).astype(bool)
+    cand["geocoded"] = cand.geocoded.astype("boolean").fillna(False).astype(bool)
     cand["addr_id"] = cand.std_address.where(cand.geocoded, cand.key)   # building-level identity
 
     # ---------------- evidence
     nppes["age_days"] = (as_of - pd.to_datetime(nppes.last_updated, errors="coerce")).dt.days
     cur = dict(zip(nppes.npi, nppes.age_days <= fresh_days))
-    cand["nppes_current"] = cand.npi.map(cur).fillna(False).astype(bool)
+    cand["nppes_current"] = cand.npi.map(cur).astype("boolean").fillna(False).astype(bool)
     c = cand[cand.address_1.notna() & cand.source.notna()]   # rows without any address are handled as NONE below
     grp = c.groupby(["npi", "tin", "addr_id"], dropna=False)
     ev = grp.agg(sources=("source", lambda s: "|".join(sorted(set(s)))),
@@ -216,10 +251,12 @@ def main():
     ev = ev.drop(columns=["_bkey"])
     ev["sources"] = [s + ("|DAC_GROUP" if g else "") + (f"|REGISTRY:{r}" if r else "")
                      for s, g, r in zip(ev.sources, ev.dac_group_match, ev.registry_match)]
-    # independent source families: NPPES | CMS enrolment (DAC individual or DAC group) | CMS facility registry
+    # independent source families: NPPES | CMS enrolment (DAC individual or DAC group) | CMS facility registry |
+    # state licensing (CDPH)
     ev["n_independent_sources"] = (ev.sources.str.contains("NPPES").astype(int)
                                    + ev.sources.str.contains("DAC").astype(int)
-                                   + ev.registry_match.ne("").astype(int))
+                                   + ev.registry_match.ne("").astype(int)
+                                   + ev.sources.str.contains("CDPH").astype(int))
     # TIN corroboration: how many OTHER NPIs on the same TIN report this address in their OWN records
     # (NPPES or individual DAC), so copied group data can never corroborate itself
     own = c[c.source.isin(["NPPES_LOC", "NPPES_SEC", "NPPES_ENDPOINT", "DAC"])].dropna(subset=["npi"])
@@ -239,13 +276,20 @@ def main():
     # Tiers (logic D5.5, D5.8). nppes_current is reported but is NOT evidence: on this run's providers,
     # Medicare confirms NPPES addresses updated within 24 months no more often than older ones
     # (data/stage5/c5_audit.txt, check A), so a recent update can't raise an address's tier.
-    cond_ver = ev.geocoded & ((ev.n_independent_sources >= 2) |
-                              ((ev.n_independent_sources == 1) & (ev.tin_corroboration | ev.dac_name_match)))
-    cond_pro = ev.geocoded & (ev.sources.str.contains("DAC") | ev.registry_match.ne(""))
+    # the address must EXIST (logic D5.10): Census geocoder match, or - for buildings the Census address ranges miss
+    # (large campuses, new buildings) - a government record outside NPPES lists this exact building (Medicare
+    # enrolment, CMS facility certification or the state licence, each validated in its own system)
+    gov = ev.sources.str.contains("DAC|CDPH") | ev.registry_match.ne("")
+    ev["address_exists_by"] = np.where(ev.geocoded, "CENSUS_GEOCODER", np.where(gov, "GOVERNMENT_RECORD", ""))
+    exists = ev.address_exists_by.ne("")
+    cond_ver = exists & ((ev.n_independent_sources >= 2) |
+                         ((ev.n_independent_sources == 1) & (ev.tin_corroboration | ev.dac_name_match)))
+    cond_pro = exists & gov
     ev["tier"] = "UNVERIFIED"
     ev.loc[cond_pro & ~ev.is_po_box, "tier"] = "PROBABLE"
     ev.loc[cond_ver & ~ev.is_po_box, "tier"] = "VERIFIED"
-    ev["points"] = (2 * ev.sources.str.contains("DAC") + 2 * ev.registry_match.ne("") + ev.sources.str.contains("NPPES_LOC")
+    ev["points"] = (2 * ev.sources.str.contains("DAC") + 2 * ev.registry_match.ne("") + 2 * ev.sources.str.contains("CDPH")
+                    + ev.sources.str.contains("NPPES_LOC")
                     + ev.sources.str.contains("NPPES_SEC") + ev.sources.str.contains("NPPES_ENDPOINT")
                     + 2 * ev.tin_corroboration + ev.dac_name_match + ev.geocoded + ev.in_state).astype(int)
     ev["tier_rank"] = ev.tier.map({"VERIFIED": 0, "PROBABLE": 1, "UNVERIFIED": 2})
@@ -261,14 +305,50 @@ def main():
     cols = ["npi", "tin", "address", "address_1", "address_2", "city", "state", "zip", "std_address", "addr_id",
             "lat", "lon", "county_fips5", "tract", "tier", "points", "rank_in_pair", "is_best", "sources",
             "n_independent_sources", "tin_corroboration", "npis_on_tin_at_addr", "dac_name_match", "registry_match", "facility_names",
-            "nppes_current", "geocoded", "in_state", "is_po_box", "evidence"]
+            "nppes_current", "geocoded", "address_exists_by", "in_state", "is_po_box", "evidence"]
     ev = ev[cols]
     # pairs with no candidate at all are kept with tier NONE
     missing = pairs.merge(ev[["npi", "tin"]].drop_duplicates(), on=["npi", "tin"], how="left", indicator=True)
     missing = missing[missing._merge == "left_only"][["npi", "tin"]].assign(tier="NONE", is_best=True, rank_in_pair=1)
     res = pd.concat([ev, missing], ignore_index=True)
+    return res, ev, g, missing, pairs
+
+
+def audit(hold: pd.DataFrame, cd: pd.DataFrame) -> pd.DataFrame:
+    """CDPH referees the hold-out mapping (built without CDPH): is each address the state's licensed location?"""
+    import numpy as np
+    h = hold[hold.npi.isin(set(cd.npi)) & hold.address_1.notna()].copy()
+    h["_k"] = [raw_key(a, c_, s_, z) for a, c_, s_, z in zip(h.address_1, h.city, h.state, h.zip)]
+    c = cd.copy()
+    c["_k"] = [raw_key(a, c_, "CA", z) for a, c_, z in zip(c.address_1, c.city, c.zip)]
+    m = h.merge(c[["npi", "_k", "zip", "cdph_lat", "cdph_lon"]].rename(columns={"_k": "_ck", "zip": "_cz"}), on="npi")
+    dist = np.sqrt(((m.lat - m.cdph_lat) * 111_000) ** 2
+                   + ((m.lon - m.cdph_lon) * 111_000 * np.cos(np.radians(m.cdph_lat.fillna(36)))) ** 2)
+    m["same_building"] = m._k.eq(m._ck) | (dist <= AUDIT_METERS)
+    m["same_zip"] = m.zip.str[:5].eq(m._cz)
+    r = m.groupby(["npi", "tin", "addr_id", "tier", "is_best"], dropna=False)[["same_building", "same_zip"]].any() \
+        .reset_index()
+    return r
+
+
+def main():
+    cfg = load_config()
+    s5 = cfg["paths"]["stage5"]
+    today = date.today()
+    # run 1 (hold-out, no CDPH) -> refereed by CDPH; run 2 (CDPH included) -> the output
+    hold, *_ = build(cfg, use_cdph=False)
+    cd = load_cdph(cfg)
+    au = audit(hold, cd)
+    acc = au[au.is_best].groupby("tier").agg(pairs=("same_building", "size"), correct_building=("same_building", "mean"),
+                                              correct_zip=("same_zip", "mean"))
+    acc_all = au.groupby("tier").agg(candidates=("same_building", "size"), correct_building=("same_building", "mean"))
+    res, ev, g, missing, pairs = build(cfg, use_cdph=True)
+    exp = acc.correct_building.round(3).to_dict()
+    res["expected_accuracy"] = res.tier.map(exp)
+    res.loc[res.tier.eq("NONE"), "expected_accuracy"] = 0.0   # PROBABLE: no state-listed pair to measure -> blank
     res.to_parquet(s5 / "npi_tin_address.parquet", index=False)
     save_csv(res, s5 / "npi_tin_address.csv")
+    au.to_parquet(s5 / "c5_cdph_audit.parquet", index=False)
 
     best = res[res.is_best]
     npis = pairs.npi.dropna().unique()
@@ -283,8 +363,20 @@ def main():
          f"TINs with >=1 VERIFIED address: {len(v_tin):,}/{pairs.tin.nunique():,} ({100 * len(v_tin) / pairs.tin.nunique():.1f}%)",
          f"addresses per pair (VERIFIED+PROBABLE): {res[res.tier.isin(['VERIFIED','PROBABLE'])].groupby(['npi','tin'], dropna=False).size().describe()[['mean','50%','max']].round(2).to_dict()}",
          f"distinct VERIFIED addresses per TIN: max {res[res.tier=='VERIFIED'].groupby('tin').addr_id.nunique().max()}",
-         f"best address out of state: {int((~best.in_state.fillna(False).astype(bool)).sum())}",
-         f"sources on best address: {best.sources.value_counts().head(8).to_dict()}"]
+         f"best address out of state: {int((~best.in_state.astype('boolean').fillna(False).astype(bool)).sum())}",
+         f"sources on best address: {best.sources.value_counts().head(8).to_dict()}",
+         "",
+         f"CDPH state licensing source: {len(cd):,} open facilities with an NPI (data date "
+         f"{cd.data_date.dropna().iloc[0] if cd.data_date.notna().any() else 'n/a'}); our NPIs listed: "
+         f"{cd.npi.isin(set(pairs.npi.dropna())).sum():,} rows, {cd[cd.npi.isin(set(pairs.npi.dropna()))].npi.nunique():,} NPIs; "
+         f"best addresses carrying CDPH: {int(best.sources.fillna('').str.contains('CDPH').sum()):,}",
+         "",
+         "Hold-out accuracy audit (mapping built WITHOUT CDPH, refereed by CDPH; correct = same building, or within "
+         f"{AUDIT_METERS} m of the state's location; same ZIP shown as a lenient check):",
+         "   best address per pair:", acc.round(3).to_string(),
+         "   all candidate addresses:", acc_all.round(3).to_string(),
+         "   -> column expected_accuracy = best-address 'correct_building' of the tier. The referee lists licensed",
+         "      facilities (hospitals, surgery centres, clinics, home health...), so it measures organization addresses."]
     (s5 / "c5_report.txt").write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 

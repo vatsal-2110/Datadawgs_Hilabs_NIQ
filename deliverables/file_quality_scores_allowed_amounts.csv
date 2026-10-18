@@ -1,0 +1,3 @@
+file_name,role,last_updated_on,age_days,payment_records,medicare_benchmarked,anchored_records,npi_valid_pct,trust_gate_failed,overall_before_gate,overall_score,Usable Payment Yield,Paid-to-Billed Realism,Medicare Reality Check,In-Network Anchoring,Field Coherence,Schema Completeness,Filler-Free Score
+2026-09-30_centene-management-company-llc_healthnet-ca_allowed-amounts.json,USED (in scope),2026-09-30,18,1970,857,109,99.34,False,40.2,40.2,18.78,34.2,34.89,32.11,76.35,100.0,97.82
+2026-09-28_centene-management-company-llc_ambetter-ca_allowed-amounts.json,comparison,2026-09-28,20,807,123,279,100.0,False,81.3,81.3,90.46,92.19,56.1,27.6,100.0,100.0,99.78

@@ -70,7 +70,7 @@ def doc_list(cfg) -> list[dict]:
         t = fetch(url, d / f"{market}-group.html").read_text(encoding="utf-8", errors="ignore")
         for u, x in re.findall(r'<a[^>]+href="([^"]+\.pdf)"[^>]*>(.*?)</a>', t, flags=re.S | re.I):
             x = re.sub(r"<[^>]+>|\s+", " ", html.unescape(x)).replace("–", "-").replace("�", "-").strip()
-            if market == "large" and "/fb/2026/" in u and PROD_RX.match(x):
+            if market == "large" and f"/fb/{cfg['evidence']['plan_document_year']}/" in u and PROD_RX.match(x):
                 docs.append({"market": market, "title": x, "url": u})
             if market == "small" and x.startswith("SBC - ") and ("ppo" in u or "hmo" in u):
                 docs.append({"market": market, "title": x, "url": u})
@@ -177,6 +177,7 @@ def main():
     cat = build_catalog(cfg)
     BRANDS = cfg["evidence"]["tailored_network_codes"]
     oop_floor = cfg["evidence"]["legal_max_oop_floor"]
+    YEAR = cfg["evidence"]["plan_document_year"]
     cat.to_parquet(P["stage2"] / "plan_design_catalog.parquet", index=False)
     large = cat[cat.market == "large"].dropna(subset=["design_key"])
 
@@ -205,17 +206,17 @@ def main():
             ev.append(f"S: Summary of Benefits and Coverage for this exact plan says Plan Type {fam}")
         elif k and k in by_key.index:                                 # D: exact design
             fam = by_key.loc[k, "families"]
-            ev.append(f"D: benefit design ({readable(k)}) exists in Health Net's 2026 plan catalog only as {fam} "
+            ev.append(f"D: benefit design ({readable(k)}) exists in Health Net's {YEAR} plan catalog only as {fam} "
                       f"(its plan document points to the {by_key.loc[k, 'contract_forms'].replace('|', ' / ')}; "
                       f"out-of-network benefits: {'yes' if by_key.loc[k, 'out_of_network'] else 'no'})")
         elif k and k.rsplit("|", 1)[0] in by_key3.index and int(k.rsplit("|", 1)[1]) >= oop_floor:   # M
             fam = by_key3.loc[k.rsplit("|", 1)[0]]
-            ev.append(f"M: benefit design ({readable(k)}) = a 2026 {fam} design with the out-of-pocket max at an "
+            ev.append(f"M: benefit design ({readable(k)}) = a {YEAR} {fam} design with the out-of-pocket max at an "
                       f"earlier year's legal maximum")
         elif partial and (k3 := "|".join(partial[-1].replace("%", "").split("/"))) in any_key3.index \
                 and "|" not in any_key3.loc[k3]:                     # M2: partial design, one family only
             fam = any_key3.loc[k3]
-            ev.append(f"M2: copay/deductible/coinsurance {partial[-1]} exists in Health Net's 2026 catalog only as {fam}")
+            ev.append(f"M2: copay/deductible/coinsurance {partial[-1]} exists in Health Net's {YEAR} catalog only as {fam}")
         elif re.search(r"\bHSA[FI]?\b", name):                        # A (HSA, HSAF = family, HSAI = individual)
             fam = hsa_fams
             ev.append(f"A: HSA-compatible design; Health Net offers HSA-compatible plans only as {hsa_fams}")
@@ -262,12 +263,12 @@ def main():
     ev_only = pr[pr.evidence_based]
     L = ["C2 rebuilt: plan network predicted from plan design, plan documents and network brands (not the network word)",
          "=" * 104,
-         f"Health Net 2026 documents parsed: {len(cat)} (large-group plan overviews {int((cat.market == 'large').sum())}, "
+         f"Health Net {YEAR} documents parsed: {len(cat)} (large-group plan overviews {int((cat.market == 'large').sum())}, "
          f"small-group SBCs {int((cat.market == 'small').sum())})",
          "Large-group design catalog: " + ", ".join(f"{k} {v}" for k, v in by_key.families.value_counts().items())
          + " design(s); designs shared by PPO and HMO/EOA: "
          + str(int(by_key.families.str.contains("PPO").sum() - (by_key.families == "PPO").sum())),
-         "Contract form by family (2026 plan overviews): "
+         f"Contract form by family ({YEAR} plan overviews): "
          + str(large.groupby("family").contract_form.agg(lambda s: s.value_counts().to_dict()).to_dict()),
          "Out-of-network benefit column by family: " + str(large.groupby("family").has_out_of_network.mean().round(2).to_dict()),
          "HMO / PPO tier columns by family: " + str(large.groupby("family").hmo_ppo_tiers.mean().round(2).to_dict()),

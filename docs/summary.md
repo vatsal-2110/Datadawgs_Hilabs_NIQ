@@ -16,26 +16,42 @@
 | All in-network prices (every code type) | 264,439 rows, 1,276 codes, 3,734 NPIs (every provider in the file) |
 | HiLabs codes priced by component | {'facility': 120, 'professional': 134} (facility = decoded revenue-code prices) |
 | Out-of-network allowed amounts (separate table) | 1,970 payments, 336 codes; median OON allowed / in-network rate 24.3x over 158 shared codes |
-| Contract formulas recovered (X% of Medicare) | 2,570 providers: {'SINGLE': 1583, 'LIKELY': 389, 'EXACT': 349, 'NONE': 249}, +252 from their TIN; 4,664 validated estimated rates (separate) |
-| Final rate file | 10,287 rows, 2,995 NPIs, 2,356 TINs, 3,035 addresses |
-| **NPIs linked to a VERIFIED address** | **44.8%** (verified or probable: 46.6%) |
-| **TINs linked to a VERIFIED address** | **41.1%** (verified or probable: 43.5%) |
-| NPPES-only baseline: NPPES primary independently confirmed | 43.2% (pipeline: 44.8%; 58 NPIs verified only at a non-NPPES-primary address; 190 pairs whose best address is not the NPPES primary) |
+| Contract formulas recovered (X% of Medicare) | 2,570 providers: {'SINGLE': 1583, 'LIKELY': 389, 'EXACT': 349, 'NONE': 249}, +252 from their TIN; 4,654 validated estimated rates (separate) |
+| Final rate file | 9,501 rows, 2,869 NPIs, 2,263 TINs, 2,947 addresses |
+| **NPIs linked to a VERIFIED address** | **49.8%** (verified or probable: 51.8%) |
+| **TINs linked to a VERIFIED address** | **45.1%** (verified or probable: 47.6%) |
+| NPPES-only baseline: NPPES primary independently confirmed | 48.3% (pipeline: 49.8%; 56 NPIs verified only at a non-NPPES-primary address; 214 pairs whose best address is not the NPPES primary) |
 | **Plan network use (C2, from plan design + Health Net plan documents)** | EPO_NETWORK: 3 (3 from evidence, 0 name only); HMO_NETWORK_ONLY: 723 (656 from evidence, 67 name only); PPO_NETWORK_PRIMARY: 453 (393 from evidence, 60 name only); PPO_NETWORK_TIER: 133 (124 from evidence, 9 name only) (`data/stage2/c2_plan_design.txt`) |
-| PPO-network evidence per provider pair (C2) | PPO_PRESUMED 3,399, PPO_CONFIRMED 210, HMO_SIGNAL 168, MIXED 3 (rules: `docs/logic_ppo_network.md` §4.1) |
+| PPO-network evidence per provider pair (C2) | PPO_PRESUMED 3,394, PPO_CONFIRMED 215, HMO_SIGNAL 168, MIXED 3 (rules: `docs/logic_ppo_network.md` §4.1) |
 
-## File quality scores (C3)
+## File quality scores (C3 scorecard, `docs/file_quality_metrics.md`)
 
-| File | Role | Overall (0-100) |
-|---|---|---|
-| 2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json | USED (in scope) | 81.0 |
-| 2026-09-30_centene-management-company-llc_healthnet-or_in-network.json | comparison | 72.7 |
-| 2026-09-28_centene-management-company-llc_ambetter-ca_in-network.json | comparison | 94.6 |
+| File type | File | Role | Overall (0-100) |
+|---|---|---|---|
+| in_network | 2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json | USED (in scope) | 78.0 |
+| in_network | 2026-09-28_centene-management-company-llc_ambetter-ca_in-network.json | comparison | 88.0 |
+| allowed | 2026-09-30_centene-management-company-llc_healthnet-ca_allowed-amounts.json | USED (in scope) | 40.2 |
+| allowed | 2026-09-28_centene-management-company-llc_ambetter-ca_allowed-amounts.json | comparison | 81.3 |
+| index | healthnet | index | 97.7 |
+| index | ambetter | index | 100.0 |
+| index | fidelis | index | 100.0 |
+| index | qualchoice | index | 65.0 |
+| index | qualchoice_alf_plan | index | 65.0 |
+| index | qualchoice_arnold_and_blevins | index | 65.0 |
+| index | qualchoice_big_four | index | 65.0 |
+| index | qualchoice_city_of_fort_smith | index | 55.0 |
+| index | qualchoice_city_of_hot_springs | index | 65.0 |
+| index | qualchoice_dillards | index | 65.0 |
+| index | qualchoice_jv_manufacturing | index | 65.0 |
 
-## Specialty sources
+Cross-check (7-metric grader, in-network only): 2026-09-30_centene-management-company-llc_healthnet-ca_in-network.json 81.0; 2026-09-28_centene-management-company-llc_ambetter-ca_in-network.json 94.6
 
-NPPES_PRIMARY: 2,136, UNMAPPED: 843, CODE_PROFILE: 348, FACILITY_MAP: 289, NPPES_SECONDARY: 118
+## Specialty
+
+Rate file rows by specialty source (every row has a HiLabs specialty): NPPES_PRIMARY: 4,994, CODE_DEFAULT: 2,042, CODE_PROFILE: 1,752, NPPES_SECONDARY: 364, FACILITY_MAP: 349
+
+Per NPI (3,734 in the file, before the row-level CODE_DEFAULT): NPPES_PRIMARY: 2,136, UNMAPPED: 704, CODE_PROFILE: 487, FACILITY_MAP: 289, NPPES_SECONDARY: 118
 
 ## Cost effectiveness (C7)
 
-AVERAGE: 1,408, HIGH_COST: 559, COST_EFFECTIVE: 459
+AVERAGE: 1,587, HIGH_COST: 636, COST_EFFECTIVE: 532

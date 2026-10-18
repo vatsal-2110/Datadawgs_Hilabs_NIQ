@@ -21,8 +21,8 @@ STAGES = [
     ("c2evidence", "src.stage2_network_evidence"),  # labels tested vs HIOS products, DOL Schedule A, legal entity
     ("rates", "src.stage4_extract_rates"),      # C4 rates
     ("c3", "src.stage3_grade_files"),           # C3 file grades (parallel)
-    ("fetch", "src.stage5_fetch_sources"),
-    ("c3score", "src.stage3_scorecard"),        # C3 scorecard: in-network, allowed-amounts and index files      # NPPES + CMS DAC (parallel, cached)
+    ("fetch", "src.stage5_fetch_sources"),      # NPPES + CMS DAC + CMS facility registries (parallel, cached)
+    ("c3score", "src.stage3_scorecard"),        # C3 scorecard: in-network, allowed-amounts and index files
     ("c5", "src.stage5_address_map"),           # addresses + tiers (Census geocoder)
     ("c4bench", "src.stage4_medicare_benchmark"),  # rate vs Medicare (own CA locality) + robust outlier flags (needs C5 county)
     ("c2providers", "src.stage2_provider_network"),  # PPO-network evidence per provider (needs C5 addresses)
@@ -33,6 +33,7 @@ STAGES = [
     ("c6", "src.stage6_build_rate_file"),       # final Excel
     ("c7", "src.stage7_cost_effectiveness"),    # bonus: cost effectiveness
     ("summary", "src.summary"),                 # summary file
+    ("deliverables", "src.export_deliverables"),  # copy the PS deliverables into deliverables/
 ]
 
 

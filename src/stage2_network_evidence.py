@@ -56,7 +56,7 @@ def load_schedule_a(cfg) -> pd.DataFrame:
 
 DECISION_COLS = ["final_network_use", "is_ppo_network", "decided_by", "evidence", "cross_checks", "sources",
                  "name_evidence", "evidence_confidence"]
-FACTOR = {"D": "PLAN_DESIGN (Health Net 2026 plan overview)", "M": "PLAN_DESIGN (earlier-year design)",
+FACTOR = {"D": "PLAN_DESIGN (Health Net current plan-year overview)", "M": "PLAN_DESIGN (earlier-year design)",
           "M2": "PLAN_DESIGN (partial design)", "S": "OWN_SBC (Summary of Benefits and Coverage)",
           "A": "HSA_DESIGN", "N": "NETWORK_BRAND"}
 NETWORK_TEXT = {

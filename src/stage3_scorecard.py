@@ -68,7 +68,7 @@ import requests
 from src.common.normalize import load_config, norm_npi
 from src.stage1_ingest_index import download
 from src.stage3_grade_files import npi_check_digit_ok
-from src.stage4_medicare_benchmark import FACILITY_POS, load_pfs
+from src.stage4_medicare_benchmark import FACILITY_POS, cms_paths, load_pfs
 
 W_IN = {"Contract-Ready Rate Yield": 30, "Medicare Reality Check": 20, "Specialty Fee-Schedule Depth": 20,
         "Single-Price Certainty": 15, "Field Coherence": 5, "Filler-Free Score": 5, "Live Provider Rate": 5}
@@ -443,7 +443,7 @@ def main():
     s3 = P["stage3"]
     s3.mkdir(parents=True, exist_ok=True)
     run_date = date.today().isoformat()
-    pfs_zip = P["cms_pfs"] / "rvu26d.zip"
+    pfs_zip = cms_paths(cfg)["pfs"]
     if not pfs_zip.exists():
         pfs_zip.parent.mkdir(parents=True, exist_ok=True)
         download(cfg["sources"]["cms_pfs_rvu_zip"], pfs_zip, cfg)

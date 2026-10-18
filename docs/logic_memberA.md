@@ -218,6 +218,8 @@ The 453 PPO rows include 34 metal-tier names ("Gold PPO 500/20", HIOS IDs 67138C
 - Together with D2.0 (one price per provider per service; `network_name` empty in 2,825/2,825 groups), the PTD data **cannot** say which providers are PPO-only vs HMO-only.
 
 ### D2.7 (CONFIRMED by Member A, 2026-10-17) PPO network rates = the whole CA in-network file, with HMO-style hints flagged, not dropped
+> **UPDATED 2026-10-18 (D6.5):** providers graded HMO_SIGNAL (paid out-of-network by the PPO plans, capitation, IPA /
+> Ambetter-HMO label) are now moved out of the final Rate File into the sheet "Excluded - HMO signals", with the reason.
 - **Rule:** every provider in `…healthnet-ca_in-network.json` is kept for C4. Columns `network_hint` (from business-name labels: AMBETTER_HMO, IPA, AMBETTER_PPO, PPO_COUNTY, HEALTHNET_PPO, DIRECT_FFS_COMMERCIAL, DIRECT_NETWORK) and `in_capitation_code` let any user exclude HMO-style providers.
 - **Why:** (1) all 453 PPO plans name this file, and only this file, as their in-network rate file, so all PPO in-network rates are in it (the PPO network ⊆ the file); (2) the file holds one price per provider per service, so no PPO-specific price is lost or mixed up; (3) nothing in the data separates providers by network.
 - **Size of the uncertainty:** HMO-style hints touch at most 19 (AMBETTER_HMO) + 14 (IPA) + 74 (capitation) = 107 of 3,780 pairs (2.8%). We report the rate-file counts with and without them.
