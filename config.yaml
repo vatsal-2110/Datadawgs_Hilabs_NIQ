@@ -171,7 +171,23 @@ address:
 
 grading:
   # C3 files to grade: the in-scope file(s) plus comparison files (matched on file_name substring)
-  compare_files: ["healthnet-or_in-network", "ambetter-ca_in-network"]
+  compare_files: ["ambetter-ca_in-network"]            # CA peer only (out of scope); Health Net OR removed: CA-only grading
+  compare_allowed_files: ["ambetter-ca_allowed-amounts"]  # CA peer for allowed-amounts grading
+  # C3 scorecard (src.stage3_scorecard): every threshold used by a metric
+  scorecard:
+    medicare_band_pct: [30, 1000]     # professional price is plausible if 30%-1000% of CA Medicare (PFS 2026); same limits as C4 rate_check
+    peer_z_max: 3.5                   # robust (median/MAD) z-score on log price within code + billing class + modifier
+    peer_min_group: 5                 # smallest peer group for the z-score
+    paid_share_band: [0.05, 1.0]      # out-of-network allowed / billed considered realistic
+    anchor_band: [0.5, 5.0]           # out-of-network allowed vs in-network median for the same code + class
+    token_billed_max: 1.0             # billed_charge <= $1 is a token / placeholder amount
+    live_provider_years: 5            # NPPES record updated within N years counts as live
+    full_npi_max: 5000                # provider metrics use every NPI up to this many, else a fixed sample
+    npi_sample: 200                   # fixed-seed sample size for larger files
+    top_codes_per_specialty: 10       # specialty fee-schedule depth: the specialty's top-N HiLabs codes by weight
+    gate_max_age_days: 90             # Trust Gate: file older than this -> overall capped
+    gate_min_npi_valid_pct: 95        # Trust Gate: fewer valid NPIs (check digit) than this -> overall capped
+    gate_cap: 50
 
 specialty:
   # Facility taxonomies -> HiLabs facility specialty codes (sheet "Spec-Proc Weights"); every taxonomy
