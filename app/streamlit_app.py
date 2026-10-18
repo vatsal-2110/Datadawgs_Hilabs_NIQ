@@ -88,7 +88,7 @@ if view == "Executive":
         tooltip=["file", "metric", alt.Tooltip("score:Q", format=".1f")])
     st.altair_chart(axis_cfg(ch), use_container_width=True)
     st.dataframe(sc[["role", "file_name", "overall_score"] + metrics], hide_index=True, use_container_width=True)
-    st.caption("Allowed-amounts files and index files are graded too (docs/file_quality_metrics.md):")
+    st.caption("Allowed-amounts files and index files are graded too (docs/C3_file_quality_metrics.md):")
     st.dataframe(D["scores_aa"][["role", "file_name", "overall_score"]], hide_index=True, use_container_width=True)
     st.dataframe(D["scores_ix"][["index_name", "overall_score", "Price Reachability", "Plan ID Integrity"]],
                  hide_index=True, use_container_width=True)

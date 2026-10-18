@@ -138,8 +138,8 @@ def main():
     if S["ppo_network_evidence_pairs"]:
         md += [f"| PPO-network evidence per provider pair (C2) | "
                + ", ".join(f"{k} {v:,}" for k, v in S["ppo_network_evidence_pairs"].items())
-               + " (rules: `docs/logic_ppo_network.md` §4.1) |"]
-    md += ["", "## File quality scores (C3 scorecard, `docs/file_quality_metrics.md`)", "",
+               + " (rules: `docs/C1_C2_C4_logic_PPO_network_and_rates.md` §4.1) |"]
+    md += ["", "## File quality scores (C3 scorecard, `docs/C3_file_quality_metrics.md`)", "",
            "| File type | File | Role | Overall (0-100) |", "|---|---|---|---|"]
     for k, rows in S["file_quality_scores"].items():
         md += [f"| {k} | {r.get('file_name') or r.get('index_name')} | {r.get('role', 'index')} | {r['overall_score']} |"

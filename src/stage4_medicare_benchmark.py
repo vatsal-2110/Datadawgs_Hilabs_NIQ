@@ -225,7 +225,7 @@ def main():
          "",
          "Data currency check (is the Medicare data stale?):",
          f"   PFS = {pfs_zip.name} (schedule year {yr}); OPPS = Addendum B {olab}. Release choice and the check that",
-         "   no newer release existed are documented in docs/logic_ppo_network.md section 5, step 7.",
+         "   no newer release existed are documented in docs/C1_C2_C4_logic_PPO_network_and_rates.md section 5, step 7.",
          f"   Health Net standard professional rates ({n_std:,} rows) vs the same locality's PFS:",
          f"      {yr}: exactly 100% of Medicare {cur[yr][0]:,} rows; at a whole-number % {cur[yr][1]:,}",
          f"      {yr0}: exactly 100% of Medicare {cur[yr0][0]:,} rows; at a whole-number % {cur[yr0][1]:,}",

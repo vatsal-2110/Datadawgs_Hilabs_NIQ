@@ -223,7 +223,7 @@ def main():
                                  "or its group is labelled PPO. HMO_SIGNAL: capitation contract, IPA / Ambetter-HMO "
                                  "label, or paid out-of-network by the PPO plans (allowed-amounts file). MIXED: both. PPO_PRESUMED: direct fee-for-service, no further evidence "
                                  "(logic §4.1). Filter to PPO_CONFIRMED for a strictly proven PPO-network view."),
-        ("Logic", "docs/logic_ppo_network.md, docs/logic_address_mapping.md; metrics: docs/file_quality_metrics.md"),
+        ("Logic", "docs/C1_C2_C4_logic_PPO_network_and_rates.md, docs/C5_logic_TIN_NPI_address_and_specialty.md; metrics: docs/C3_file_quality_metrics.md"),
     ], columns=["Item", "Meaning"])
     # Summary sheet: what the file is and how far to trust it, readable in 30 seconds
     files = pd.read_parquet(cfg["paths"]["stage1"] / "files.parquet")

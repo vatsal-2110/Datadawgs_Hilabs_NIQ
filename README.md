@@ -4,18 +4,17 @@ Finds Centene's **PPO network** (commercial group, California) in its Transparen
 files, maps every provider to **practicing addresses** with evidence tiers, and produces a provider rate file at
 **NPI × TIN × address × billing code** level.
 
-| PS deliverable | Where (the `deliverables/` folder is refreshed at the end of every run) |
+| PS deliverable | File in `deliverables/` (numbered as in the PS; refreshed at the end of every run; index: `deliverables/0_README.md`) |
 |---|---|
-| 1. Rate file (Excel) | **`deliverables/provider_rate_file.xlsx`**: one row per NPI × TIN × Address × Billing Code with NPI, TIN, Address, Billing Code, Specialty, Rate first; sheets Summary, Rate File, Rate Variants, Estimated Rates, Excluded - HMO signals, Read Me (+ `.csv`) |
-| 2. Logic file | `docs/logic_ppo_network.md` (a: identifying the PPO network, C1–C4, conflicts §3.8) + `docs/logic_address_mapping.md` (b: TIN → NPI → address, specialty, C5) + `docs/logic_rate_file_c6_c7.md` (rate file C6, cost effectiveness C7). Full decision log: `docs/logic_memberA.md` |
-| 3. File quality metrics | `docs/file_quality_metrics.md`; scores in `deliverables/file_quality_scores_*.csv` |
-| 4. Summary file | `deliverables/summary.md` (+ `summary.json`), generated from the run |
+| 1. Rate file (Excel) | `1_rate_file.xlsx` (+ `1_rate_file.csv`): one row per NPI × TIN × Address × Billing Code, with NPI, TIN, Address, Billing Code, Specialty, Rate first |
+| 2. Logic file | `2a_logic_PPO_network_C1_C2_C4.md` (a: PPO network) · `2b_logic_TIN_NPI_address_C5.md` (b: TIN → NPI → address) · `2c_logic_rate_file_and_cost_effectiveness_C6_C7.md` · `2d_decision_log_C1_C2_C4.md` · evidence workbooks `2e_C1_index_plans_and_files.xlsx`, `2f_C2_PPO_network.xlsx` (sources in `docs/`) |
+| 3. File quality metrics | `3_file_quality_metrics_C3.md` + `3_file_quality_scores_*.csv` |
+| 4. Summary file | `4_summary.md` (+ `4_summary.json`), generated from the run |
 | 5. Video | recorded separately (max 5 minutes) |
-| 6. Code repo | this repo: re-runs from this README with one command; no hardcoded paths (all paths and URLs in `config.yaml`) |
-| 7. Bonus | (a) UI with executive and analyst views: `app/streamlit_app.py`; (b) cost effectiveness C7: `deliverables/C7_cost_effectiveness.xlsx` |
-| Supporting workbooks | `deliverables/C1_index_plans_and_files.xlsx` (C1 table, unique files, scope evidence), `deliverables/C2_ppo_network.xlsx` (PPO plans with evidence, provider PPO evidence) |
+| 6. Code repo | this repository: re-runs from this README with one command; no hardcoded paths (all paths and URLs in `config.yaml`) |
+| 7. Brownie points | (a) UI with executive and analyst views: `app/streamlit_app.py` · (b) cost effectiveness: `7b_cost_effectiveness_C7.xlsx` |
 
-Full decision log (every rule with alternatives and limitations): `docs/logic_memberA.md`. Column definitions: `SCHEMAS.md`.
+Full decision log (every rule with alternatives and limitations): `docs/C1_C2_C4_decision_log.md`. Column definitions: `SCHEMAS.md`.
 
 ## Setup
 Python 3.10+.
@@ -30,7 +29,7 @@ Place the HiLabs-supplied Excel at the path in `config.yaml → paths.hilabs_xls
 ## Run everything
 ```bash
 python -m src.run_all            # or: make all
-python -m tests.verify_memberA   # independent checks of the outputs (or: make verify)
+python -m tests.verify_outputs   # independent checks of the outputs (or: make verify)
 python -m pytest tests -q        # unit tests, no data needed (or: make test)
 streamlit run app/streamlit_app.py
 ```

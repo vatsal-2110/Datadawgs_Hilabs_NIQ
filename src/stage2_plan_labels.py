@@ -6,7 +6,7 @@ Output: data/stage2/plan_labels.parquet (+ .csv), one row per in-scope plan row:
         provider_network (PPO_NETWORK / HMO_NETWORK / HMO_NETWORK+PPO_SPECIALISTS / UNCONFIRMED) = which doctors,
         is_ppo, uses_ppo_network, uses_ppo_network_incl_inferred, confidence, rule, evidence, source
 
-Rules are applied in priority order; the first that matches wins (see docs/logic_memberA.md, D2.2-D2.5).
+Rules are applied in priority order; the first that matches wins (see docs/C1_C2_C4_decision_log.md, D2.2-D2.5).
 
 Usage (from project root):
   python -m src.stage2_plan_labels
@@ -33,7 +33,7 @@ SRC_CDI_EPO = ("https://www.insurance.ca.gov/01-consumers/110-health/10-basics/u
 # *_INFERRED = not documented for these exact plans; reasoning + source recorded in network_evidence.
 NETWORK_OF = {
     "PPO": ("PPO_NETWORK", "PPO plan uses the PPO network (Health Net plan-type page)"),
-    # Updated 2026-10-18 (Member B): the 2009 handbook inference is superseded by current regulator filings: Health
+    # Updated 2026-10-18: the 2009 handbook inference is superseded by current regulator filings: Health
     # Net's EPO runs on its own PureCare One EPO network (CA Dept. of Insurance network-waiver filing, config
     # evidence.product_types.EPO). So an EPO plan is NOT evidence of PPO-network use.
     "EPO": ("EPO_NETWORK", "Health Net EPO = Health Net Life on the PureCare One EPO network, a separate network "

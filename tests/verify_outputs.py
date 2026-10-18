@@ -4,7 +4,7 @@ Re-derives key results with DIFFERENT code paths than the pipeline (plain json.l
 instead of ijson streaming + dicts) and checks every rule and cross-file consistency.
 
 Usage (from project root, after the pipeline has run):
-  python -m tests.verify_memberA
+  python -m tests.verify_outputs
 Exit code 0 = all checks passed.
 """
 from __future__ import annotations

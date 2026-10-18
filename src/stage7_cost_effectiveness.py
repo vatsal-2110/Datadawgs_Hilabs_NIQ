@@ -143,7 +143,7 @@ def write_excel(cfg, prov, base, s7):
                                           "(xubh-q36u), linked by CCN through the CDPH facility listing. NONE: not rated"),
         ("value_label", "price at/below peers x quality good (MIPS >= c7.mips_good, stars >= c7.stars_good in config)"),
         ("label_with_quality", "price label, except COST_EFFECTIVE with poor CMS quality -> CHEAP_BUT_LOW_QUALITY"),
-        ("Logic", "docs/logic_rate_file_c6_c7.md, section C7"),
+        ("Logic", "docs/C6_C7_logic_rate_file_and_cost_effectiveness.md, section C7"),
     ], columns=["Item", "Meaning"])
     with pd.ExcelWriter(xp, engine="openpyxl") as xw:
         for name, df in (("Summary", summ), ("Providers", prov), ("Best value by specialty", best),

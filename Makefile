@@ -15,7 +15,7 @@ stage1-sample:     ## C1 on the synthetic test index
 profile:           ## C2 step 0: profile the CA in-network rate file (facts only)
 	$(PY) -m src.stage2_profile_rate_file
 
-pairs:             ## hand-off to Member B: tin_npi_pairs.parquet from in-scope in-network files
+pairs:             ## hand-off to C5: tin_npi_pairs.parquet from in-scope in-network files
 	$(PY) -m src.stage4_tin_npi_pairs
 
 labels:            ## C2 layer 1: label every in-scope plan (product_type + provider_network)
@@ -24,8 +24,8 @@ labels:            ## C2 layer 1: label every in-scope plan (product_type + prov
 rates:             ## C4: extract rates for HiLabs codes from in-scope in-network files
 	$(PY) -m src.stage4_extract_rates
 
-verify:            ## independent checks of Member A outputs (C1, labels, pairs, rates)
-	$(PY) -m tests.verify_memberA
+verify:            ## independent checks of the outputs (C1-C7)
+	$(PY) -m tests.verify_outputs
 
 test:              ## unit tests (no data needed): address standardization, C5 tier rules
 	$(PY) -m pytest tests -q

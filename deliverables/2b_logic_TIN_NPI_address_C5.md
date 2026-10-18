@@ -129,7 +129,7 @@ Assuming "Medicare is right, NPPES is stale" is itself an assumption. On this ru
 primary, Medicare and an endpoint address (most providers here are organizations, which DAC doesn't list), too few to
 conclude. The statewide study (3.4) has 28,623.
 
-### 3.4 Supplementary statewide study (Member B; full NPPES file 2026-10-11 and full CMS DAC national file)
+### 3.4 Supplementary statewide study (full NPPES file 2026-10-11 and full CMS DAC national file)
 Run on all 1.26 M active California NPIs, independent of the PPO network, to test the assumptions at scale:
 - **NPPES vs Medicare:** of 156,805 CA clinicians in both, Medicare lists the NPPES primary building for only **45.7%**.
   For **50.8%** it lists no NPPES address at all, and these are real moves, not spelling: 58% are in another city and

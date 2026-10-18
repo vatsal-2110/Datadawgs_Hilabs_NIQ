@@ -1,4 +1,4 @@
-"""Hand-off for Member B: every (NPI, TIN) pair in the in-scope in-network rate files.
+"""Hand-off for C5: every (NPI, TIN) pair in the in-scope in-network rate files.
 
 Reads only what B needs: provider groups (TIN + NPI list + business name), plus cheap helper
 columns from one pass over the prices (how many codes, which billing classes, capitation).

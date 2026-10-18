@@ -12,7 +12,7 @@ not by name), another 133 (EOA, POS) reach it through a PPO tier, and all of the
 of Labor) · **[regulator]** a CMS or state regulator filing · **[payer document]** Health Net's own published document,
 quoted · **[inferred]** reasoning, with its basis.
 Reproduce: `python -m src.stage1_scope_evidence` → `data/stage1/c1_scope_evidence.txt`;
-`python -m src.stage2_network_evidence` → `data/stage2/c2_network_evidence.txt`; `python -m tests.verify_memberA`.
+`python -m src.stage2_network_evidence` → `data/stage2/c2_network_evidence.txt`; `python -m tests.verify_outputs`.
 
 ---
 
@@ -199,7 +199,7 @@ column or sheet so a reviewer can check it.
 | 7 | One provider, one service, several prices from different contracts | The provider's **primary contract** (the provider_reference that prices the most services): a real contracted price, not an average nobody is paid; all prices kept | §5 step 4; Rate Variants sheet |
 | 8 | A professional fee and a facility fee for the same code | Different services, never averaged; the headline uses the provider's own component; C7 compares like with like | §5 step 3; `rate_component` |
 | 9 | In-network rate vs out-of-network allowed amount for the same code | Never mixed: the allowed amount is a payment, not a negotiated rate; used only as evidence (#6) and as a benchmark | §5 step 6 |
-| 10 | Address sources disagree (NPPES vs Medicare vs registries vs state licence) | Agreement between independent families decides the tier; no single source is trusted alone; every candidate is kept with its tier | `docs/logic_address_mapping.md` §2 (conflicts) |
+| 10 | Address sources disagree (NPPES vs Medicare vs registries vs state licence) | Agreement between independent families decides the tier; no single source is trusted alone; every candidate is kept with its tier | `docs/C5_logic_TIN_NPI_address_and_specialty.md` §2 (conflicts) |
 
 ## 4. Can the providers inside the shared file be split into PPO vs HMO?
 Tested from five angles; all say **no**:
@@ -358,7 +358,7 @@ failed the test produce no estimates.
 
 **Result:** 8,820 HiLabs rate rows · 2,995 NPIs · 2,356 TINs · 3,037 NPI–TIN pairs · 203 codes (professional: 7,547
 rows, 134 codes; facility: 1,273 rows, 120 codes, 176 NPIs). Office visit 99213 $104.88 and 99214 $188.24 (medians
-across providers). An independent `json.load` recompute in `tests/verify_memberA.py` reproduces every rate,
+across providers). An independent `json.load` recompute in `tests/verify_outputs.py` reproduces every rate,
 primary-contract choice and contract count.
 
 ## 6. Data-quality findings handed to grading (C3)
@@ -397,4 +397,4 @@ primary-contract choice and contract count.
 | Healthcare Finance News, Health Net exits commercial group market: https://www.healthcarefinancenews.com/news/centenes-health-net-exits-commercial-group-market-2-states | 4.1: contract lifetime context |
 | Health Net Salud HMO y Más (large group): https://www.healthnet.com/content/healthnet/en_us/find-a-plan/large-employers/type-of-plans/tailored-networks/saludconhealth.html | 3.4: SAL family = HMO |
 
-*Full decision log with every alternative and limitation: `docs/logic_memberA.md`. Column definitions: `SCHEMAS.md`.*
+*Full decision log with every alternative and limitation: `docs/C1_C2_C4_decision_log.md`. Column definitions: `SCHEMAS.md`.*

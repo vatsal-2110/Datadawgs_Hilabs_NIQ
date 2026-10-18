@@ -8,7 +8,7 @@ Output: data/stage4/rates_all.parquet  every in-network price, every code type, 
         data/stage4/oon_vs_in_network.parquet  per code: in-network rate vs out-of-network allowed amount
         data/stage4/c4_report.txt
 
-Method (logic D4.3-D4.10, docs/logic_ppo_network.md section 5):
+Method (logic D4.3-D4.10, docs/C1_C2_C4_logic_PPO_network_and_rates.md section 5):
   1 every price of every code type is extracted (not only HiLabs codes), so every provider in the file gets rates
   2 facility prices are decoded: a revenue-code (RC) item whose price carries a CPT / HCPCS code in
     additional_information is a facility price FOR THAT CPT / HCPCS service; billing_code = that code, the RC is kept

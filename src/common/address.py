@@ -1,11 +1,11 @@
-"""Shared address standardization (Member B): one rule set used everywhere an address is compared.
+"""Shared address standardization (C5): one rule set used everywhere an address is compared.
 
 Goal: a canonical *matching* key that is identical when two sources describe the same building, not USPS
 certification. Rules are a subset of USPS Publication 28 (street suffixes, directionals, secondary unit
 designators). Deterministic, no network: the Census geocoder (stage5_address_map) then validates the result.
 
 Every rule was added because real NPPES vs CMS Doctors & Clinicians pairs disagreed on it
-(docs/logic_address_mapping.md, section "Address standardization"):
+(docs/C5_logic_TIN_NPI_address_and_specialty.md, section "Address standardization"):
   * CMS abbreviates every word ("HEALTH CTR DR"), NPPES often doesn't ("HEALTH CENTER DR")
   * suites written without a designator ("1317 YNEZ PL A" = "1317 YNEZ PL STE A", "MCHENRY AVE 340")
   * spacing variants ("LA VETA" = "LAVETA", "EXPRESS WAY" = "EXPRESSWAY")

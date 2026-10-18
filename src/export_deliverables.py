@@ -1,12 +1,7 @@
-"""Copy the PS deliverables into one tracked folder (config paths.deliverables) at the end of every run.
+"""Copy the PS deliverables into one tracked folder (config paths.deliverables), numbered as in PS section 6.
 
-data/ holds every intermediate output and is not committed; the deliverables a reviewer needs are copied here so the
-repository always carries the latest ones:
-  1 rate file (Excel)              provider_rate_file.xlsx  (+ .csv)
-  4 summary file                   summary.md, summary.json
-  C1 / C2 / C7 workbooks           C1_index_plans_and_files.xlsx, C2_ppo_network.xlsx, C7_cost_effectiveness.xlsx
-  C3 scores                        file_quality_scores_*.csv (scorecard per file type)
-The logic files (deliverable 2) and the file quality metrics (deliverable 3) live in docs/.
+data/ holds every intermediate output and is not committed; this folder carries the latest deliverables. It is
+emptied and rebuilt on every run, so a file from an older run can never linger. 0_README.md lists every file.
 
 Usage: python -m src.export_deliverables
 """
@@ -17,31 +12,70 @@ import shutil
 from src.common.normalize import ROOT, load_config
 
 
+def deliverables(cfg) -> list[tuple]:
+    """(PS deliverable, source file, name in deliverables/, what it is)."""
+    P, D = cfg["paths"], ROOT / "docs"
+    return [
+        ("1. Rate file (Excel)", P["stage6"] / "provider_rate_file.xlsx", "1_rate_file.xlsx",
+         "One row per NPI x TIN x Address x Billing Code; columns NPI, TIN, Address, Billing Code, Specialty, Rate "
+         "first. Sheets: Summary, Rate File, Rate Variants, Estimated Rates, Excluded - HMO signals, Read Me (C6)"),
+        ("1. Rate file (Excel)", P["stage6"] / "provider_rate_file.csv", "1_rate_file.csv",
+         "The Rate File sheet as CSV"),
+        ("2. Logic file (a) PPO network", D / "C1_C2_C4_logic_PPO_network_and_rates.md",
+         "2a_logic_PPO_network_C1_C2_C4.md",
+         "(a) identifying the PPO network: C1 scope, C2 PPO plans and providers, C4 rates; sources, rules, conflicts (3.8)"),
+        ("2. Logic file (b) TIN -> NPI -> address", D / "C5_logic_TIN_NPI_address_and_specialty.md",
+         "2b_logic_TIN_NPI_address_C5.md",
+         "(b) mapping TIN to NPI to address, and specialty: sources, rules, conflicts, measured accuracy (C5)"),
+        ("2. Logic file (rate file, cost effectiveness)", D / "C6_C7_logic_rate_file_and_cost_effectiveness.md",
+         "2c_logic_rate_file_and_cost_effectiveness_C6_C7.md", "How the rate file is built (C6) and cost effectiveness (C7)"),
+        ("2. Logic file (decision log)", D / "C1_C2_C4_decision_log.md", "2d_decision_log_C1_C2_C4.md",
+         "Every C1, C2, C4 decision with alternatives and limitations"),
+        ("2. Logic file (evidence workbook)", P["stage1"] / "C1_index_plans_and_files.xlsx", "2e_C1_index_plans_and_files.xlsx",
+         "C1 table: brand, plan name, plan ID, market type, rate file URL; unique files; scope evidence"),
+        ("2. Logic file (evidence workbook)", P["stage2"] / "C2_ppo_network.xlsx", "2f_C2_PPO_network.xlsx",
+         "C2: every CA plan's network use with evidence, the PPO plans, provider-level PPO evidence"),
+        ("3. File quality metrics", D / "C3_file_quality_metrics.md", "3_file_quality_metrics_C3.md",
+         "C3 metrics: question, calculation, reason and weight of each; results"),
+        ("3. File quality metrics (scores)", P["stage3"] / "scorecard_in_network.csv", "3_file_quality_scores_in_network.csv",
+         "C3 scores of the in-network rate files"),
+        ("3. File quality metrics (scores)", P["stage3"] / "scorecard_allowed.csv", "3_file_quality_scores_allowed_amounts.csv",
+         "C3 scores of the allowed-amounts files"),
+        ("3. File quality metrics (scores)", P["stage3"] / "scorecard_index.csv", "3_file_quality_scores_index_files.csv",
+         "C3 scores of the 11 index files"),
+        ("4. Summary file", D / "summary.md", "4_summary.md", "High-level metrics of this run (generated)"),
+        ("4. Summary file", ROOT / "data" / "summary.json", "4_summary.json", "The same metrics as JSON"),
+        ("7b. Brownie points: cost effectiveness (C7)", P["stage7"] / "C7_cost_effectiveness.xlsx",
+         "7b_cost_effectiveness_C7.xlsx", "Sheets: Summary, Providers, Best value by specialty, Code comparisons, Read Me"),
+    ]
+
+
 def main():
     cfg = load_config()
-    P = cfg["paths"]
-    out = P["deliverables"]
+    out = cfg["paths"]["deliverables"]
     out.mkdir(parents=True, exist_ok=True)
-    files = {
-        P["stage6"] / "provider_rate_file.xlsx": "provider_rate_file.xlsx",
-        P["stage6"] / "provider_rate_file.csv": "provider_rate_file.csv",
-        P["stage1"] / "C1_index_plans_and_files.xlsx": "C1_index_plans_and_files.xlsx",
-        P["stage2"] / "C2_ppo_network.xlsx": "C2_ppo_network.xlsx",
-        P["stage7"] / "C7_cost_effectiveness.xlsx": "C7_cost_effectiveness.xlsx",
-        P["stage3"] / "scorecard_in_network.csv": "file_quality_scores_in_network.csv",
-        P["stage3"] / "scorecard_allowed.csv": "file_quality_scores_allowed_amounts.csv",
-        P["stage3"] / "scorecard_index.csv": "file_quality_scores_index.csv",
-        ROOT / "docs" / "summary.md": "summary.md",
-        ROOT / "data" / "summary.json": "summary.json",
-    }
-    for src, name in files.items():
+    for old in out.iterdir():                       # rebuilt every run: nothing stale can remain
+        if old.is_file():
+            try:
+                old.unlink()
+            except PermissionError:
+                print(f"WARNING: {old} is open in another program; close it and re-run")
+    rows = []
+    for item, src, name, what in deliverables(cfg):
         if not src.exists():
             print(f"WARNING: {src} missing (run the pipeline first)")
             continue
         try:
             shutil.copy2(src, out / name)
+            rows.append((item, name, what))
         except PermissionError:
             print(f"WARNING: {out / name} is open in another program; close it and re-run")
+    md = ["# Deliverables (numbered as in PS section 6)", "",
+          "Regenerated by `python -m src.run_all` (stage `deliverables`). Not here: 5. Video (recorded separately), "
+          "6. Code repo (this repository), 7a. UI (`app/streamlit_app.py`).", "",
+          "| PS deliverable | File | What it is |", "|---|---|---|"]
+    md += [f"| {i} | `{n}` | {w} |" for i, n, w in rows]
+    (out / "0_README.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     print(f"deliverables in {out}: {sorted(p.name for p in out.iterdir())}")
 
 

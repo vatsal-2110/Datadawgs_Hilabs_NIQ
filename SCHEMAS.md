@@ -71,7 +71,7 @@ t4_regulator, t4_network, t4_source, evidence_confidence (HIGH / MEDIUM / REVIEW
 g_counties, l_ppo_label, c_capitation, h_hmo_label, has_rates, ppo_network_evidence (PPO_CONFIRMED / HMO_SIGNAL / MIXED /
 PPO_PRESUMED), ppo_evidence_detail. Carried into the rate file as `ppo_network_evidence`, `ppo_evidence_detail`.
 
-## Stage 4 — hand-off to Member B (`python -m src.stage4_tin_npi_pairs`)
+## Stage 4 — hand-off to C5 (`python -m src.stage4_tin_npi_pairs`)
 
 ### `data/stage4/tin_npi_pairs.parquet` (+ `.csv`)
 One row per (npi, tin, file_key) found in the in-scope in-network file(s). No rates.
@@ -93,7 +93,7 @@ One row per (npi, tin, file_key) found in the in-scope in-network file(s). No ra
 | n_tins_for_npi | Int64 | TINs this NPI bills under in the file (<NA> for TIN-only rows) |
 | file_key | str | join key to `data/stage1/files.parquet` |
 
-**Note for Member B:** when `business_names` is a label (e.g. "HEALTH NET DIRECT FFS COMMERCIAL", "PPO: Los Angeles County"), it is **not** the organization's name. Use NPPES / CMS for the real name and address.
+**Note for C5:** when `business_names` is a label (e.g. "HEALTH NET DIRECT FFS COMMERCIAL", "PPO: Los Angeles County"), it is **not** the organization's name. Use NPPES / CMS for the real name and address.
 
 ### `data/stage4/rates_all.parquet` / `rates.parquet` (+ `.csv`) — C4 output (`python -m src.stage4_extract_rates`)
 `rates_all` = every in-network price, every code type (CPT, HCPCS, RC), every provider. `rates` = its HiLabs-code subset
@@ -157,7 +157,7 @@ oon_billed_median, oon_payments, oon_providers, oon_to_in_network_ratio, is_hila
 `data/stage3/file_scores.parquet` (+ `.csv`): one row per graded file. `role` (USED (in scope) / comparison), raw metrics
 (`code_cov_weight_pct`, `type1_pct`, `zero_or_missing_rate_pct`, `outlier_pct`, `dollar_type_pct`, `duplicate_entry_pct`,
 `conflict_pct`, `age_days`, `npi_check_digit_ok_pct`, `tin_9digit_pct`, `network_name_filled_pct`, `real_expiry_pct`, …),
-scores `M1_code_coverage` … `M7_id_validity` (0–100) and `overall_score`. Definitions: `docs/file_quality_metrics.md`.
+scores `M1_code_coverage` … `M7_id_validity` (0–100) and `overall_score`. Definitions: `docs/C3_file_quality_metrics.md`.
 
 ## Stage 5 — addresses and specialty
 `data/stage5/nppes_npi.parquet`: npi, found, enumeration_type, name, last_updated, taxonomy_codes, primary_taxonomy.
@@ -171,7 +171,7 @@ scores `M1_code_coverage` … `M7_id_validity` (0–100) and `overall_score`. De
 | address | display address (Census-standardized when geocoded, suite in brackets) |
 | address_1, address_2, city, state, zip, std_address, addr_id | raw and standardized parts; addr_id = building identity |
 | lat, lon, county_fips5, tract | from the Census geocoder |
-| tier | VERIFIED / PROBABLE / UNVERIFIED / NONE (rules: `docs/logic_address_mapping.md`) |
+| tier | VERIFIED / PROBABLE / UNVERIFIED / NONE (rules: `docs/C5_logic_TIN_NPI_address_and_specialty.md`) |
 | sources | e.g. `DAC\|NPPES_LOC`, `NPPES_LOC\|DAC_GROUP`, `NPPES_LOC\|REGISTRY:CMS_HOSPITAL`, `CDPH\|NPPES_LOC`, `NPPES_ENDPOINT` |
 | n_independent_sources | families agreeing: NPPES, CMS enrolment (DAC), CMS facility registry, CDPH state licence |
 | expected_accuracy | measured share of this tier's best addresses that match the CDPH state licence, on a mapping built without CDPH (hold-out audit, logic §3.6): VERIFIED 0.975, UNVERIFIED 0.86, PROBABLE blank, NONE 0 |
@@ -196,7 +196,7 @@ specialty_source (NPPES_PRIMARY / NPPES_SECONDARY / FACILITY_MAP / CODE_PROFILE 
 One row per NPI × TIN × Address × Billing Code. Columns: **NPI, TIN, Address, Billing Code, Specialty, Rate**, then provider_name,
 npi_type, item_name, billing_code_type, place_of_service, modifier, n_rate_variants, variant_rate_min, variant_rate_max,
 address_tier, city, state, zip, county_fips5, lat, lon, spec_cd, specialty_source, code_in_specialty_list, network_hint,
-in_capitation_code, sources, evidence. Rate rule: `docs/logic_rate_file_c6_c7.md` D6.1.
+in_capitation_code, sources, evidence. Rate rule: `docs/C6_C7_logic_rate_file_and_cost_effectiveness.md` D6.1.
 Sheets: Summary, Rate File, Rate Variants, Estimated Rates, Read Me. Rate File columns added 2026-10-18: `specialty_source` now includes CODE_DEFAULT (provider has no HiLabs specialty: HiLabs specialty that owns the billing code), `provider_taxonomy` (provider's own NPPES taxonomy), `address_expected_accuracy`, `trust_score` / `trust_band` / `trust_detail`, `pct_of_medicare`, `rate_check`, `contract_multiplier_pct`.
 
 ## Stage 7 — cost effectiveness (`python -m src.stage7_cost_effectiveness`)

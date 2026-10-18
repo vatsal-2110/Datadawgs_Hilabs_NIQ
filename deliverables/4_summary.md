@@ -22,9 +22,9 @@
 | **TINs linked to a VERIFIED address** | **45.1%** (verified or probable: 47.6%) |
 | NPPES-only baseline: NPPES primary independently confirmed | 48.3% (pipeline: 49.8%; 56 NPIs verified only at a non-NPPES-primary address; 214 pairs whose best address is not the NPPES primary) |
 | **Plan network use (C2, from plan design + Health Net plan documents)** | EPO_NETWORK: 3 (3 from evidence, 0 name only); HMO_NETWORK_ONLY: 723 (656 from evidence, 67 name only); PPO_NETWORK_PRIMARY: 453 (393 from evidence, 60 name only); PPO_NETWORK_TIER: 133 (124 from evidence, 9 name only) (`data/stage2/c2_plan_design.txt`) |
-| PPO-network evidence per provider pair (C2) | PPO_PRESUMED 3,394, PPO_CONFIRMED 215, HMO_SIGNAL 168, MIXED 3 (rules: `docs/logic_ppo_network.md` §4.1) |
+| PPO-network evidence per provider pair (C2) | PPO_PRESUMED 3,394, PPO_CONFIRMED 215, HMO_SIGNAL 168, MIXED 3 (rules: `docs/C1_C2_C4_logic_PPO_network_and_rates.md` §4.1) |
 
-## File quality scores (C3 scorecard, `docs/file_quality_metrics.md`)
+## File quality scores (C3 scorecard, `docs/C3_file_quality_metrics.md`)
 
 | File type | File | Role | Overall (0-100) |
 |---|---|---|---|

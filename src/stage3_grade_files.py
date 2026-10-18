@@ -5,7 +5,7 @@ Graded files: every in-scope in-network file (the file we USE) plus comparison f
 
 Each file is streamed with ijson (never loaded whole); files are graded in PARALLEL (one process each).
 
-Metrics (each is a percentage 0-100; formulas and reasons in docs/file_quality_metrics.md):
+Metrics (each is a percentage 0-100; formulas and reasons in docs/C3_file_quality_metrics.md):
   M1 code_coverage     HiLabs code weight priced (incl. facility prices decoded from RC items) / total weight (25)
   M2 provider_detail   share of NPIs that are individuals (Type 1), NPPES sample              (weight 15)
   M3 rate_validity     100 - %prices <= 0 - %robust outliers (|modified z| > 3.5 in-service)  (weight 15)

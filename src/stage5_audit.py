@@ -1,4 +1,4 @@
-"""C5 audit (Member B): re-derive, on THIS run's providers, the evidence behind the C5 rules.
+"""C5 audit: re-derive, on THIS run's providers, the evidence behind the C5 rules.
 
 Every check compares buildings with the shared standardizer (src.common.address.building_key), independent of
 the Census geocoder, so the evidence does not depend on the step it is used to justify.

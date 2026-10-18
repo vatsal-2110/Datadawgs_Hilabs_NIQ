@@ -93,7 +93,7 @@ def c1_book(cfg):
                                       f"filings (config evidence.hios_issuers: {e4})."),
         ("Result", f"In scope: {int(plans.in_scope.sum()):,} plans in {plans[plans.in_scope].structure_id.nunique()} "
                    f"structure(s), using: {'; '.join(f'{r.file_role} {r.file_name}' for r in ins.itertuples())}."),
-        ("Logic", "docs/logic_ppo_network.md section 1; report data/stage1/c1_scope_evidence.txt"),
+        ("Logic", "docs/C1_C2_C4_logic_PPO_network_and_rates.md section 1; report data/stage1/c1_scope_evidence.txt"),
     ]
     out = P["stage1"] / "C1_index_plans_and_files.xlsx"
     write_book(out, {"C1 Plan-File Table": t, "Unique Rate Files": f, "Scope Evidence": sv}, readme)
@@ -188,7 +188,7 @@ def c2_book(cfg):
                                   "counties, PPO all of CA) or PPO group label; HMO_SIGNAL = capitation or IPA / "
                                   "Ambetter-HMO label; MIXED = both; PPO_PRESUMED = direct fee-for-service, no further "
                                   "evidence (priced like PPO_CONFIRMED: median per-code difference 0.000)."),
-        ("Logic", "docs/logic_ppo_network.md sections 2-4; reports data/stage2/c2_network_evidence.txt and "
+        ("Logic", "docs/C1_C2_C4_logic_PPO_network_and_rates.md sections 2-4; reports data/stage2/c2_network_evidence.txt and "
                   "c2_provider_network.txt"),
     ]
     out = P["stage2"] / "C2_ppo_network.xlsx"
